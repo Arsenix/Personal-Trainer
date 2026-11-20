@@ -1,0 +1,142 @@
+@import "tailwindcss";
+@import "@fontsource-variable/archivo/wdth.css";
+@import "@fontsource-variable/instrument-sans/wght.css";
+
+/*
+  Dirección visual (iteración 1)
+  - Quien usa esto: un PT independiente entre dos clases, con el teléfono en la mano, y sus alumnos.
+  - Tono: directo y deportivo, sin gritar. Verde eléctrico solo donde algo está disponible o activo.
+  - Tipografía: Archivo (ancho variable) para títulos, Instrument Sans para texto.
+  - Esquinas: 3px en campos, 10px en paneles, píldora solo en etiquetas de estado.
+*/
+@theme {
+  --color-ink: #11161b;
+  --color-ink-soft: #1b232a;
+  --color-ground: #eceee7;
+  --color-paper: #f7f8f3;
+  --color-line: #d2d7cb;
+  --color-muted: #56626b;
+  --color-volt: #c8f23c;
+  --color-volt-deep: #a8cf1a;
+  --color-danger: #b3261e;
+  --color-ok: #1e6a3a;
+
+  --font-display: "Archivo Variable", "Arial Narrow", sans-serif;
+  --font-sans: "Instrument Sans Variable", "Segoe UI", sans-serif;
+
+  --radius-field: 3px;
+  --radius-panel: 10px;
+}
+
+html {
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  min-height: 100dvh;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+h1, h2, h3, .display {
+  font-family: var(--font-display);
+  font-stretch: 88%;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+}
+h1 { font-size: clamp(1.9rem, 4.5vw, 2.6rem); }
+h2 { font-size: 1.35rem; font-stretch: 92%; font-weight: 750; }
+h3 { font-size: 1.05rem; font-stretch: 96%; font-weight: 700; letter-spacing: 0; }
+
+:focus-visible {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 2px;
+}
+.on-dark :focus-visible { outline-color: var(--color-volt); }
+
+/* ---- Botones ---- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  min-height: 2.75rem; padding: .55rem 1.1rem;
+  border-radius: var(--radius-field);
+  font-weight: 650; font-size: .95rem; line-height: 1.1; text-align: center;
+  border: 1.5px solid var(--color-ink);
+  cursor: pointer;
+  transition: background-color .15s ease-out, color .15s ease-out, transform .1s ease-out;
+}
+.btn:active { transform: translateY(1px); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: .55; cursor: not-allowed; transform: none; }
+.btn-primary { background: var(--color-ink); color: var(--color-paper); }
+.btn-primary:hover:not(:disabled) { background: var(--color-ink-soft); }
+.btn-volt { background: var(--color-volt); color: var(--color-ink); }
+.btn-volt:hover:not(:disabled) { background: var(--color-volt-deep); }
+.btn-quiet { background: transparent; color: var(--color-ink); border-color: var(--color-line); }
+.btn-quiet:hover:not(:disabled) { border-color: var(--color-ink); }
+.btn-danger { background: transparent; color: var(--color-danger); border-color: var(--color-danger); }
+.btn-danger:hover:not(:disabled) { background: var(--color-danger); color: var(--color-paper); }
+.btn-sm { min-height: 2.25rem; padding: .35rem .75rem; font-size: .85rem; }
+
+/* ---- Formularios ---- */
+.field { display: grid; gap: .35rem; }
+.field label, .label { font-weight: 600; font-size: .9rem; }
+.field .hint { color: var(--color-muted); font-size: .82rem; }
+.input {
+  width: 100%; min-height: 2.75rem; padding: .55rem .75rem;
+  background: var(--color-paper); color: var(--color-ink);
+  border: 1.5px solid var(--color-line); border-radius: var(--radius-field);
+  font: inherit;
+  transition: border-color .15s ease-out;
+}
+.input:hover { border-color: #aab1a2; }
+.input:focus-visible { border-color: var(--color-ink); outline-offset: 1px; }
+.input[aria-invalid="true"] { border-color: var(--color-danger); }
+.field-error { color: var(--color-danger); font-size: .85rem; font-weight: 500; }
+
+/* ---- Superficies ---- */
+.panel {
+  background: var(--color-paper);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-panel);
+}
+.panel-pad { padding: 1.25rem; }
+@media (min-width: 640px) { .panel-pad { padding: 1.75rem; } }
+
+.tag {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .12rem .6rem; border-radius: 999px;
+  font-size: .78rem; font-weight: 650; line-height: 1.4;
+  background: var(--color-ground); color: var(--color-ink);
+  border: 1px solid var(--color-line);
+}
+.tag-volt { background: var(--color-volt); border-color: var(--color-volt-deep); }
+.tag-warn { background: #fff1d6; border-color: #e9c46a; color: #6b4a00; }
+
+.alert {
+  padding: .75rem .9rem; border-radius: var(--radius-field);
+  font-size: .92rem; border-left: 4px solid;
+}
+.alert-error { background: #fbe9e7; border-color: var(--color-danger); color: #6e1510; }
+.alert-ok { background: #e4f3e8; border-color: var(--color-ok); color: #134a28; }
+
+/* ---- Navegación de la zona del PT ---- */
+.nav-link {
+  display: flex; align-items: center; gap: .65rem;
+  padding: .6rem .75rem; border-radius: var(--radius-field);
+  font-weight: 600; font-size: .95rem;
+  color: #c9d1d6; border-left: 3px solid transparent;
+  transition: background-color .15s ease-out, color .15s ease-out;
+}
+.nav-link:hover { background: var(--color-ink-soft); color: #fff; }
+.nav-link[aria-current="page"] { color: #fff; border-left-color: var(--color-volt); background: var(--color-ink-soft); }
+
+/* ---- Semana ilustrada (decorativa) ---- */
+.slot { height: 1.15rem; border-radius: 2px; background: #27313a; }
+.slot-taken { background: var(--color-volt); }
+.slot-off { background: transparent; border: 1px dashed #3a4650; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
