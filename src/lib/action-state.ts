@@ -11,6 +11,8 @@ export type ActionState = {
   /** Link de invitación recién creado (el token solo existe en este momento). */
   link?: string;
   mailed?: boolean;
+  /** Bloqueo que cancelaría clases ya reservadas: cuántas, a la espera de confirmación del PT. */
+  conflicts?: number;
 };
 
 export const initialState: ActionState = {};

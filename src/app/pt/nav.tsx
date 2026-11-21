@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, MapPin, UserCog, Users } from "lucide-react";
+import { Activity, CalendarDays, Clock3, MapPin, UserCog, Users } from "lucide-react";
 
 const ITEMS = [
+  { href: "/pt/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/pt", label: "Alumnos", icon: Users, exact: true },
+  { href: "/pt/disponibilidad", label: "Disponibilidad", icon: Clock3 },
   { href: "/pt/lugares", label: "Lugares", icon: MapPin },
   { href: "/pt/perfil", label: "Perfil y cobro", icon: UserCog },
   { href: "/pt/actividad", label: "Actividad", icon: Activity },

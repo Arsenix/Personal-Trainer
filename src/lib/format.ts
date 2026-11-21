@@ -24,6 +24,12 @@ const AUDIT_LABELS: Record<string, string> = {
   "location.archived": "Archivó un lugar",
   "location.restored": "Restauró un lugar",
   "profile.updated": "Actualizó su perfil y datos de transferencia",
+  "booking.created": "Reservó una clase",
+  "booking.cancelled_by_student": "Canceló una clase",
+  "booking.cancelled_by_pt": "Canceló clases",
+  "availability.updated": "Cambió su horario de atención",
+  "availability.blocked": "Bloqueó horas de su agenda",
+  "availability.unblocked": "Quitó un bloqueo de su agenda",
 };
 
 export function auditLabel(action: string): string {

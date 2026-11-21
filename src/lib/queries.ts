@@ -184,3 +184,114 @@ export async function previewInvitation(token: string): Promise<InvitationPrevie
     return rows[0] ?? null;
   });
 }
+
+// ---------------------------------------------------------------------------
+// Agenda (iteración 2)
+// ---------------------------------------------------------------------------
+export type SlotState = "free" | "booked" | "mine" | "blocked" | "unavailable" | "past";
+
+export type SlotRow = {
+  start: Date;
+  date: string;
+  hour: number;
+  state: SlotState;
+  bookingId: string | null;
+  studentId: string | null;
+  studentName: string | null;
+  locationName: string | null;
+};
+
+/** Horarios entre dos fechas locales (ambas incluidas). Quién ve qué lo decide la base (list_slots). */
+export async function listSlots(userId: string, from: string, to: string): Promise<SlotRow[]> {
+  return withUser(userId, async (c) => {
+    const { rows } = await c.query(
+      `select slot_start as start, slot_date::text as date, slot_hour as hour, slot_state as state,
+              slot_booking_id as "bookingId", slot_student_id as "studentId",
+              slot_student_name as "studentName", slot_location_name as "locationName"
+         from list_slots($1::date, $2::date)`,
+      [from, to],
+    );
+    return rows;
+  });
+}
+
+export type RuleRow = { id: string; weekday: number; start: number; end: number };
+
+export async function listRules(ptId: string): Promise<RuleRow[]> {
+  return withUser(ptId, async (c) => {
+    const { rows } = await c.query(
+      `select id, weekday, start_hour as start, end_hour as "end"
+         from availability_rules order by weekday, start_hour`,
+    );
+    return rows;
+  });
+}
+
+export type BlockRow = { id: string; date: string; start: number; end: number; reason: string | null };
+
+/** Bloqueos de hoy en adelante (fecha local de Santiago). */
+export async function listBlocks(ptId: string): Promise<BlockRow[]> {
+  return withUser(ptId, async (c) => {
+    const { rows } = await c.query(
+      `select id, block_date::text as date, start_hour as start, end_hour as "end", reason
+         from availability_blocks
+        where block_date >= (now() at time zone app_tz())::date
+        order by block_date, start_hour`,
+    );
+    return rows;
+  });
+}
+
+export type BookingStatus = "booked" | "cancelled_student" | "cancelled_pt";
+
+export type StudentBooking = {
+  id: string;
+  start: Date;
+  status: BookingStatus;
+  cancelReason: string | null;
+  locationName: string | null;
+};
+
+/** Clases del alumno: las próximas vigentes y las últimas pasadas o canceladas. */
+export async function listStudentBookings(
+  studentId: string,
+): Promise<{ upcoming: StudentBooking[]; history: StudentBooking[] }> {
+  return withUser(studentId, async (c) => {
+    const sql = `select b.id, b.start_at as start, b.status, b.cancel_reason as "cancelReason", l.name as "locationName"
+                   from bookings b left join locations l on l.id = b.location_id`;
+    const upcoming = await c.query(`${sql} where b.status = 'booked' and b.end_at > now() order by b.start_at`);
+    const history = await c.query(
+      `${sql} where not (b.status = 'booked' and b.end_at > now()) order by b.start_at desc limit 8`,
+    );
+    return { upcoming: upcoming.rows, history: history.rows };
+  });
+}
+
+export type BookingContact = {
+  start: Date;
+  cancelReason: string | null;
+  locationName: string | null;
+  ptEmail: string;
+  ptName: string;
+  studentEmail: string;
+  studentName: string;
+};
+
+/** Datos de una clase para armar los correos. Lo lee quien está involucrado (PT o alumno). */
+export async function getBookingContact(userId: string, bookingId: string): Promise<BookingContact | null> {
+  return withUser(userId, async (c) => {
+    const { rows } = await c.query(
+      `select b.start_at as start, b.cancel_reason as "cancelReason", l.name as "locationName",
+              pu.email as "ptEmail", p.display_name as "ptName",
+              su.email as "studentEmail", su.name as "studentName"
+         from bookings b
+         join pt_profiles p on p.user_id = b.pt_id
+         join "user" pu on pu.id = b.pt_id
+         join "user" su on su.id = b.student_id
+         left join locations l on l.id = b.location_id
+        where b.id = $1`,
+      [bookingId],
+    );
+    return rows[0] ?? null;
+  });
+}

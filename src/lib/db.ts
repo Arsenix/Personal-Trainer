@@ -76,3 +76,9 @@ export async function audit(
 export function isUniqueViolation(e: unknown): boolean {
   return typeof e === "object" && e !== null && (e as { code?: string }).code === "23505";
 }
+
+/** Las funciones SQL de negocio fallan con un mensaje que es un código fijo (p. ej. "slot_taken"). */
+export function dbCode(e: unknown): string {
+  const m = e instanceof Error ? e.message : "";
+  return /^[a-z_]+$/.test(m) ? m : "";
+}

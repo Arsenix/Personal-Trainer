@@ -122,3 +122,40 @@ export function fieldErrors(error: z.ZodError): FieldErrors {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Agenda (iteración 2)
+// ---------------------------------------------------------------------------
+export type HourRange = { start: number; end: number };
+
+/** Lee los pares from/to de un formulario y devuelve tramos ordenados, o un mensaje de error. */
+export function parseHourRanges(from: string[], to: string[]): { ranges: HourRange[] } | { error: string } {
+  const ranges: HourRange[] = [];
+  const n = Math.max(from.length, to.length);
+  for (let i = 0; i < n; i++) {
+    const f = (from[i] ?? "").trim();
+    const t = (to[i] ?? "").trim();
+    if (f === "" && t === "") continue;
+    if (f === "" || t === "") return { error: "Cada tramo necesita hora de inicio y de término." };
+    if (!/^\d{1,2}$/.test(f) || !/^\d{1,2}$/.test(t)) return { error: "Hora no válida." };
+    const start = Number(f);
+    const end = Number(t);
+    if (start < 0 || start > 23 || end < 1 || end > 24) return { error: "Hora no válida." };
+    if (end <= start) return { error: "El término de cada tramo debe ser después del inicio." };
+    ranges.push({ start, end });
+  }
+  ranges.sort((a, b) => a.start - b.start);
+  for (let i = 1; i < ranges.length; i++) {
+    if (ranges[i].start < ranges[i - 1].end) return { error: "Los tramos de un mismo día no pueden pisarse." };
+  }
+  return { ranges };
+}
+
+export const blockSchema = z
+  .object({
+    date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Elige una fecha"),
+    from: z.coerce.number().int().min(0).max(23),
+    to: z.coerce.number().int().min(1).max(24),
+    reason: optionalText(120),
+  })
+  .refine((v) => v.to > v.from, { path: ["to"], message: "El término debe ser después del inicio" });

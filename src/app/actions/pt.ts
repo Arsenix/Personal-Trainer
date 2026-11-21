@@ -1,16 +1,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { audit, isUniqueViolation, withUser } from "@/lib/db";
+import { audit, dbCode, isUniqueViolation, withUser } from "@/lib/db";
 import { requirePt } from "@/lib/session";
 import { generateToken, hashToken, INVITATION_TTL_DAYS } from "@/lib/tokens";
 import { appUrl, sendMail } from "@/lib/mail";
 import {
+  blockSchema,
   fieldErrors,
   inviteSchema,
   locationSchema,
+  parseHourRanges,
   profileSchema,
 } from "@/lib/validation";
+import { notifyBooking } from "@/lib/agenda-mail";
+import { todayLocal } from "@/lib/dates";
 import { formValues, str, type ActionState } from "@/lib/action-state";
 import { allow } from "@/lib/rate-limit";
 
@@ -273,4 +277,166 @@ export async function updateProfile(_prev: ActionState, fd: FormData): Promise<A
   });
   revalidatePath("/pt", "layout");
   return { ok: true, message: "Perfil guardado.", values };
+}
+
+// ---------------------------------------------------------------------------
+// Agenda (iteración 2)
+// ---------------------------------------------------------------------------
+const UUID = /^[0-9a-f-]{36}$/;
+
+function refreshAgenda() {
+  revalidatePath("/pt/agenda");
+  revalidatePath("/pt/disponibilidad");
+  revalidatePath("/alumno", "layout");
+}
+
+export async function saveDayRules(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requirePt();
+  const weekday = Number(str(fd, "weekday"));
+  if (!Number.isInteger(weekday) || weekday < 1 || weekday > 5) return { error: "Día no válido." };
+  const parsed = parseHourRanges(
+    fd.getAll("from").map(String),
+    fd.getAll("to").map(String),
+  );
+  if ("error" in parsed) return { error: parsed.error };
+  await withUser(user.id, async (c) => {
+    await c.query("delete from availability_rules where weekday = $1", [weekday]);
+    for (const r of parsed.ranges) {
+      await c.query(
+        "insert into availability_rules (pt_id, weekday, start_hour, end_hour) values ($1, $2, $3, $4)",
+        [user.id, weekday, r.start, r.end],
+      );
+    }
+    await audit(c, user.id, "availability.updated", "availability_rules", String(weekday), {
+      weekday,
+      ranges: parsed.ranges.length,
+    });
+  });
+  refreshAgenda();
+  return {
+    ok: true,
+    message: parsed.ranges.length === 0 ? "Ese día quedó sin atención." : "Horario guardado.",
+  };
+}
+
+export async function resetDefaultRules(): Promise<ActionState> {
+  const user = await requirePt();
+  await withUser(user.id, async (c) => {
+    await c.query("delete from availability_rules");
+    await c.query(
+      `insert into availability_rules (pt_id, weekday, start_hour, end_hour)
+       select $1, d, 6, 22 from generate_series(1, 5) as d`,
+      [user.id],
+    );
+    await audit(c, user.id, "availability.updated", "availability_rules", undefined, {
+      reset: true,
+    });
+  });
+  refreshAgenda();
+  return { ok: true, message: "Horario restablecido: lunes a viernes, de 06:00 a 22:00." };
+}
+
+/** Bloquea horas de una fecha. Si caen clases reservadas, pide confirmación antes de cancelarlas. */
+export async function createBlock(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requirePt();
+  const values = formValues(fd);
+  const parsed = blockSchema.safeParse({
+    date: str(fd, "date"),
+    from: str(fd, "from"),
+    to: str(fd, "to"),
+    reason: str(fd, "reason"),
+  });
+  if (!parsed.success) return { errors: fieldErrors(parsed.error), values };
+  const { date, from, to, reason } = parsed.data;
+  if (date < todayLocal()) return { errors: { date: "Esa fecha ya pasó" }, values };
+
+  const conflicts = await withUser(user.id, async (c) => {
+    const { rows } = await c.query("select count_block_conflicts($1::date, $2, $3) as n", [date, from, to]);
+    return rows[0].n as number;
+  });
+  if (conflicts > 0 && str(fd, "confirm") !== "1") {
+    return { conflicts, values };
+  }
+
+  try {
+    const cancelled = await withUser(user.id, async (c) => {
+      const { rows } = await c.query(
+        `select cancelled_booking as id from block_range($1::date, $2, $3, $4)`,
+        [date, from, to, reason],
+      );
+      return rows.map((r) => r.id as string);
+    });
+    await Promise.all(cancelled.map((id) => notifyBooking(user.id, id, "cancelled_by_pt")));
+    refreshAgenda();
+    return {
+      ok: true,
+      message:
+        cancelled.length > 0
+          ? `Horario bloqueado. Cancelamos ${cancelled.length} ${cancelled.length === 1 ? "clase" : "clases"} y avisamos por correo.`
+          : "Horario bloqueado.",
+    };
+  } catch (e) {
+    const code = dbCode(e);
+    if (code === "block_past") return { errors: { date: "Esa fecha ya pasó" }, values };
+    if (code === "block_invalid") return { error: "Revisa las horas del bloqueo.", values };
+    console.error("createBlock", e);
+    return { error: "No pudimos bloquear ese horario.", values };
+  }
+}
+
+/** Bloquea una sola hora libre desde la agenda. */
+export async function blockSlot(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requirePt();
+  const date = str(fd, "date");
+  const hour = Number(str(fd, "hour"));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isInteger(hour) || hour < 0 || hour > 23) {
+    return { error: "Horario no válido." };
+  }
+  try {
+    const cancelled = await withUser(user.id, async (c) => {
+      const { rows: n } = await c.query("select count_block_conflicts($1::date, $2, $3) as n", [date, hour, hour + 1]);
+      if (n[0].n > 0) return null;
+      await c.query("select * from block_range($1::date, $2, $3, null)", [date, hour, hour + 1]);
+      return true;
+    });
+    if (cancelled === null) return { error: "Ahora hay una clase reservada en ese horario. Revisa la agenda." };
+  } catch (e) {
+    if (dbCode(e) === "block_past") return { error: "Ese horario ya pasó." };
+    console.error("blockSlot", e);
+    return { error: "No pudimos bloquear ese horario." };
+  }
+  refreshAgenda();
+  return { ok: true };
+}
+
+export async function removeBlock(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requirePt();
+  const id = str(fd, "id");
+  if (!UUID.test(id)) return { error: "Bloqueo no válido." };
+  await withUser(user.id, async (c) => {
+    const { rowCount } = await c.query("delete from availability_blocks where id = $1", [id]);
+    if (rowCount) await audit(c, user.id, "availability.unblocked", "availability_block", id);
+  });
+  refreshAgenda();
+  return { ok: true };
+}
+
+export async function cancelBookingAsPt(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requirePt();
+  const id = str(fd, "id");
+  const reason = str(fd, "reason").slice(0, 200);
+  if (!UUID.test(id)) return { error: "Clase no válida." };
+  try {
+    await withUser(user.id, (c) => c.query("select cancel_booking($1, $2)", [id, reason]));
+  } catch (e) {
+    const code = dbCode(e);
+    if (code === "booking_not_active") return { error: "Esa clase ya estaba cancelada." };
+    if (code === "booking_past") return { error: "Esa clase ya pasó." };
+    if (code === "booking_not_found") return { error: "No encontramos esa clase." };
+    console.error("cancelBookingAsPt", e);
+    return { error: "No pudimos cancelar la clase." };
+  }
+  await notifyBooking(user.id, id, "cancelled_by_pt");
+  refreshAgenda();
+  return { ok: true, message: "Clase cancelada. Le avisamos al alumno por correo." };
 }

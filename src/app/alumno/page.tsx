@@ -1,14 +1,27 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getStudentHome } from "@/lib/queries";
+import { StudentCancelForm } from "@/components/agenda";
+import { canStudentCancel, slotLong } from "@/lib/dates";
+import { getStudentHome, listStudentBookings, type BookingStatus } from "@/lib/queries";
 import { requireStudent } from "@/lib/session";
 import { ACCOUNT_TYPE_LABEL, KIND_LABEL } from "@/lib/validation";
 
 export const metadata = { title: "Mi cuenta" };
 
+const STATUS_LABEL: Record<BookingStatus, string> = {
+  booked: "Realizada",
+  cancelled_student: "Cancelada por ti",
+  cancelled_pt: "Cancelada por tu PT",
+};
+
 export default async function AlumnoPage() {
   const user = await requireStudent();
-  const home = await getStudentHome(user.id);
+  const [home, { upcoming, history }] = await Promise.all([
+    getStudentHome(user.id),
+    listStudentBookings(user.id),
+  ]);
   if (!home) notFound();
+  const now = new Date();
   const t = home.transfer;
   const hasTransfer = Boolean(t.transferHolder || t.transferBank || t.transferNumber);
 
@@ -30,6 +43,32 @@ export default async function AlumnoPage() {
           )}
         </p>
       </header>
+
+      <section aria-labelledby="proximas" className="grid gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="proximas">Tus próximas clases</h2>
+          <Link href="/alumno/reservar" className="btn btn-primary btn-sm">
+            Reservar una clase
+          </Link>
+        </div>
+        {upcoming.length === 0 ? (
+          <p className="panel panel-pad text-muted">
+            No tienes clases reservadas. Elige un horario libre de {home.ptName}.
+          </p>
+        ) : (
+          <ul className="grid gap-3">
+            {upcoming.map((b) => (
+              <li key={b.id} className="panel grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-start">
+                <div className="min-w-0">
+                  <p className="font-semibold capitalize">{slotLong(b.start)}</p>
+                  <p className="text-sm text-muted">{b.locationName ?? home.locationName ?? "Lugar por definir"}</p>
+                </div>
+                <StudentCancelForm id={b.id} canCancel={canStudentCancel(b.start, now)} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="panel panel-pad grid gap-1" aria-labelledby="lugar">
         <h2 id="lugar">Dónde entrenas</h2>
@@ -69,9 +108,21 @@ export default async function AlumnoPage() {
         )}
       </section>
 
-      <p className="text-sm text-muted">
-        Muy pronto verás aquí las horas disponibles de {home.ptName} y tus créditos del mes.
-      </p>
+      {history.length > 0 && (
+        <section aria-labelledby="anteriores" className="grid gap-3">
+          <h2 id="anteriores">Clases anteriores</h2>
+          <ul className="panel divide-y divide-line">
+            {history.map((b) => (
+              <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                <span className="capitalize">{slotLong(b.start)}</span>
+                <span className="tag">{STATUS_LABEL[b.status]}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <p className="text-sm text-muted">Muy pronto verás aquí también tus créditos del mes.</p>
     </div>
   );
 }

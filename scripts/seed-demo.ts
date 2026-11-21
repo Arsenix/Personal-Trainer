@@ -14,6 +14,7 @@ async function main() {
   if (process.env.NODE_ENV === "production") throw new Error("El seed de demostración no corre en producción.");
   const { appPool, withSystem, withUser, audit } = await import("../src/lib/db");
   const { generateToken, hashToken, newId } = await import("../src/lib/tokens");
+  const { addDays, mondayOf, todayLocal } = await import("../src/lib/dates");
 
   const PASSWORD = "DemoPass-2026";
   const ptEmail = "camila@demo.ptagenda.cl";
@@ -58,6 +59,7 @@ async function main() {
     ["Javiera Soto", "javiera@demo.ptagenda.cl", "+56 9 5555 0103", "Domicilio de Javiera", true],
     ["Tomás Araya", "tomas@demo.ptagenda.cl", null, "Energy Gym Providencia", false],
   ] as const;
+  const studentIds: Record<string, string> = {};
   for (const [name, email, phone, place, accept] of students) {
     const token = generateToken();
     await withUser(ptId, async (c) => {
@@ -69,11 +71,32 @@ async function main() {
       await audit(c, ptId, "invitation.created", "invitation", rows[0].id, { email });
     });
     if (accept) {
-      await withSystem((c) => c.query("select accept_invitation($1, $2, $3)", [hashToken(token), newId(), hash]));
+      const id = newId();
+      studentIds[email] = id;
+      await withSystem((c) => c.query("select accept_invitation($1, $2, $3)", [hashToken(token), id, hash]));
     } else {
       console.log(`Invitación pendiente de ${name}: ${process.env.APP_URL ?? "http://localhost:3000"}/invitacion/${token}`);
     }
   }
+  // Algunas clases reservadas para la próxima semana (hora de Santiago).
+  const nextMonday = addDays(mondayOf(todayLocal()), 7);
+  const bookings: [string, number, number][] = [
+    ["matias@demo.ptagenda.cl", 1, 7],
+    ["matias@demo.ptagenda.cl", 3, 7],
+    ["javiera@demo.ptagenda.cl", 2, 18],
+    ["javiera@demo.ptagenda.cl", 4, 19],
+  ];
+  for (const [email, dayOffset, hour] of bookings) {
+    const day = addDays(nextMonday, dayOffset);
+    await withUser(studentIds[email], async (c) => {
+      const { rows } = await c.query(
+        "select make_timestamptz(extract(year from $1::date)::int, extract(month from $1::date)::int, extract(day from $1::date)::int, $2, 0, 0, 'America/Santiago') as t",
+        [day, hour],
+      );
+      await c.query("select book_class($1)", [rows[0].t]);
+    });
+  }
+
   console.log(`Listo. Ingresa con ${ptEmail} / ${PASSWORD}`);
   await appPool().end();
 }

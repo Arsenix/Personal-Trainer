@@ -4,9 +4,9 @@ Agenda para personal trainers independientes. El PT publica sus horas (lunes a v
 
 Nombre provisorio. Stack: Next.js 16 · TypeScript · PostgreSQL 16 · Better Auth · Zod · Tailwind v4 · Vitest · Playwright.
 
-## Estado: iteración 1 (identidad y alumnos)
+## Estado: iteración 2 (disponibilidad y reservas)
 
-Incluye:
+Iteración 1, identidad y alumnos:
 
 - Registro e ingreso del PT (correo y contraseña).
 - Invitación de alumnos por link de un solo uso (vale 7 días; en la base solo se guarda su hash). El PT puede copiar el link, pedir uno nuevo (el anterior deja de servir) o revocarlo. Si hay `RESEND_API_KEY`, también se envía por correo.
@@ -16,7 +16,15 @@ Incluye:
 - Registro de actividad (append-only): altas, invitaciones, cambios de lugares y perfil, e inicios de sesión.
 - Datos de demostración.
 
-Todavía no incluye: disponibilidad y reservas (iteración 2), créditos, planes y cancelación con 24 horas (iteración 3), rutinas (iteración 4), notificaciones por correo de clases y panel de agenda (iteración 5). Tampoco hay recuperación de contraseña ni cobro de la plataforma a los PT.
+Iteración 2, disponibilidad y reservas:
+
+- **Disponibilidad** (`/pt/disponibilidad`): cada PT parte con lunes a viernes de 06:00 a 22:00 y puede editar tramos por día, restablecer el horario base y bloquear fechas u horas (vacaciones, imprevistos). Si un bloqueo cae sobre clases reservadas, pide confirmación, las cancela y avisa por correo.
+- **Agenda del PT** (`/pt/agenda`): semana en grilla con clases (alumno y lugar), horas libres, bloqueadas y pasadas. Puede bloquear una hora o cancelar una clase con motivo; el crédito siempre se devuelve cuando cancela el PT (cuando existan créditos, iteración 3).
+- **Reserva del alumno** (`/alumno/reservar`): ve solo los horarios libres de su PT hasta 8 semanas adelante, elige uno y confirma. No necesita aprobación; el PT recibe un correo. Puede cancelar con 24 horas o más de anticipación; después ya no.
+- Las reglas viven en la base: no hay dos clases en la misma hora de un PT (restricción de exclusión, probada con reservas simultáneas), horario `America/Santiago` con cambio de hora, y RLS para que cada uno vea solo lo suyo.
+- Requiere la extensión `btree_gist` (viene en `postgresql-contrib`); el usuario que corre las migraciones debe poder crearla.
+
+Todavía no incluye: que la reserva dependa de créditos o de un mes activado, créditos, planes y cancelación con 24 horas (iteración 3), rutinas (iteración 4), notificaciones por correo de clases y panel de agenda (iteración 5). Tampoco hay recuperación de contraseña ni cobro de la plataforma a los PT.
 
 ## Cómo correrlo en tu máquina
 
@@ -56,8 +64,8 @@ Las cuentas no se crean por la vía pública de Better Auth (`disableSignUp`). E
 
 ```powershell
 pnpm typecheck && pnpm lint
-pnpm test:unit      # RUT, tokens, validación, límite de intentos
-pnpm test:int       # PostgreSQL real: RLS, invitaciones, auditoría, permisos de roles (base pt_agenda_test)
+pnpm test:unit      # RUT, tokens, validación, límite de intentos, fechas
+pnpm test:int       # PostgreSQL real: RLS, invitaciones, agenda, reservas simultáneas, auditoría, permisos de roles (base pt_agenda_test)
 pnpm build
 pnpm test:e2e       # navegador real: flujo PT y alumno completo (base pt_agenda_test, puerto 3100)
 ```

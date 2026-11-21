@@ -140,3 +140,18 @@ h3 { font-size: 1.05rem; font-stretch: 96%; font-weight: 700; letter-spacing: 0;
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ---- Agenda semanal del PT ---- */
+.cell {
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  min-height: 3.25rem; padding: .35rem .6rem;
+  border: 1px solid var(--color-line); border-radius: 6px;
+  background: var(--color-paper); font-size: .85rem;
+}
+.cell-booked { background: var(--color-volt); border-color: var(--color-volt-deep); }
+.cell-blocked {
+  background: repeating-linear-gradient(135deg, #e3e6dd 0 6px, #eceee7 6px 12px);
+  color: var(--color-muted);
+}
+.cell-past { opacity: .6; background: transparent; }
+.cell-empty { border-style: dashed; border-color: transparent; background: transparent; }

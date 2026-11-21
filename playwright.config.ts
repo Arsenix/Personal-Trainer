@@ -7,11 +7,11 @@ const PORT = 3100;
 const e2eEnv = {
   ADMIN_DATABASE_URL:
     process.env.TEST_ADMIN_DATABASE_URL ?? "postgres://ptagenda_admin:admin_dev_pass@localhost:5432/pt_agenda_test",
-  DATABASE_URL: process.env.TEST_DATABASE_URL ?? "postgres://ptagenda_app:test_app_pass@localhost:5432/pt_agenda_test",
+  DATABASE_URL: process.env.TEST_DATABASE_URL ?? "postgres://ptagenda_app:dev_app_pass@localhost:5432/pt_agenda_test",
   AUTH_DATABASE_URL:
-    process.env.TEST_AUTH_DATABASE_URL ?? "postgres://ptagenda_auth:test_auth_pass@localhost:5432/pt_agenda_test",
-  APP_DB_PASSWORD: "test_app_pass",
-  AUTH_DB_PASSWORD: "test_auth_pass",
+    process.env.TEST_AUTH_DATABASE_URL ?? "postgres://ptagenda_auth:dev_auth_pass@localhost:5432/pt_agenda_test",
+  APP_DB_PASSWORD: "dev_app_pass",
+  AUTH_DB_PASSWORD: "dev_auth_pass",
   BETTER_AUTH_SECRET: "e2e-secret-0123456789abcdef0123456789abcdef",
   APP_URL: `http://localhost:${PORT}`,
   RESEND_API_KEY: "",
@@ -25,7 +25,6 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 10_000 },
   reporter: [["list"]],
-  globalSetup: "./e2e/global-setup.ts",
   use: {
     baseURL: `http://localhost:${PORT}`,
     channel: process.env.E2E_CHANNEL || undefined,
@@ -35,7 +34,8 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: {
-    command: `pnpm exec next start -p ${PORT}`,
+    // Primero deja la base de pruebas limpia y migrada; después levanta la app ya compilada (pnpm build).
+    command: `pnpm exec tsx scripts/reset-db.ts && pnpm exec next start -p ${PORT}`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: false,
     timeout: 60_000,
