@@ -4,7 +4,7 @@ Agenda para personal trainers independientes. El PT publica sus horas (lunes a v
 
 Nombre provisorio. Stack: Next.js 16 · TypeScript · PostgreSQL 16 · Better Auth · Zod · Tailwind v4 · Vitest · Playwright.
 
-## Estado: iteración 3 (planes, créditos y comprobantes)
+## Estado: iteración 4 (rutinas)
 
 Iteración 1, identidad y alumnos:
 
@@ -32,7 +32,14 @@ Iteración 3, planes, créditos y comprobantes:
 - **Comprobante de transferencia**: el alumno sube una foto o PDF (hasta 5 MB) en su inicio. El tipo se verifica por el contenido del archivo y se vuelve a validar en la base. El PT lo abre (solo él y el alumno pueden), lo rechaza con un motivo o activa el mes, y al activar los pendientes quedan aceptados.
 - Los comprobantes se guardan en la base (bytea). Para un volumen alto conviene pasarlos a almacenamiento de objetos.
 
-Todavía no incluye: avisos por correo al subir un comprobante y panel de pendientes (iteración 5), recordatorio de fin de mes, rutinas (iteración 4). Tampoco hay recuperación de contraseña ni cobro de la plataforma a los PT.
+Iteración 4, rutinas:
+
+- **Rutinas** (`/pt/rutinas`): el PT arma una rutina estructurada para cada alumno: nombre, indicaciones generales, hasta 7 días y hasta 20 ejercicios por día (nombre, series, repeticiones y nota). Puede reordenar días y ejercicios, y el editor sugiere los ejercicios que ya usó.
+- Cada alumno tiene **una sola rutina activa**. Crear una nueva archiva la anterior; el PT puede archivar, reactivar, editar o **copiar** una rutina a otro de sus alumnos.
+- **Mi rutina** (`/alumno/rutina`): el alumno ve solo su rutina activa, en solo lectura. La base garantiza que no vea archivadas ni las de otros.
+- La rutina se guarda completa en una sola operación en la base (`save_routine`), que valida todo antes de escribir, y queda en la actividad.
+
+Todavía no incluye: seguimiento de lo que el alumno hizo en cada sesión, biblioteca de ejercicios con videos, avisos por correo al subir un comprobante y panel de pendientes (iteración 5), recordatorio de fin de mes. Tampoco hay recuperación de contraseña ni cobro de la plataforma a los PT.
 
 ## Cómo correrlo en tu máquina
 
@@ -73,7 +80,7 @@ Las cuentas no se crean por la vía pública de Better Auth (`disableSignUp`). E
 ```powershell
 pnpm typecheck && pnpm lint
 pnpm test:unit      # RUT, tokens, validación, límite de intentos, fechas, tipo de archivo
-pnpm test:int       # PostgreSQL real: RLS, invitaciones, agenda, reservas simultáneas, créditos, comprobantes, auditoría, permisos de roles (base pt_agenda_test)
+pnpm test:int       # PostgreSQL real: RLS, invitaciones, agenda, reservas simultáneas, créditos, comprobantes, rutinas, auditoría, permisos de roles (base pt_agenda_test)
 pnpm build
 pnpm test:e2e       # navegador real: flujo PT y alumno completo (base pt_agenda_test, puerto 3100)
 ```

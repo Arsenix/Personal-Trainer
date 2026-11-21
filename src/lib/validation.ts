@@ -194,3 +194,25 @@ export const adjustSchema = z.object({
   delta: intField(-60, 60, "Ingresa un número entre -60 y 60").refine((n) => n !== 0, "No puede ser 0"),
   note: text(2, 200, "Cuenta brevemente el motivo"),
 });
+
+// ---------------------------------------------------------------------------
+// Rutinas (iteración 4)
+// ---------------------------------------------------------------------------
+export const exerciseSchema = z.object({
+  name: text(1, 80, "Cada ejercicio necesita un nombre"),
+  sets: z.coerce.number().int("Series: un número entero").min(1, "Series: entre 1 y 20").max(20, "Series: entre 1 y 20"),
+  reps: text(1, 20, "Indica las repeticiones (ej. 10 o 8-10)"),
+  note: z.string().trim().max(200, "La nota admite hasta 200 caracteres").default(""),
+});
+
+export const routineDaySchema = z.object({
+  title: text(1, 60, "Cada día necesita un título"),
+  exercises: z.array(exerciseSchema).min(1, "Cada día necesita al menos un ejercicio").max(20, "Máximo 20 ejercicios por día"),
+});
+
+export const routineSchema = z.object({
+  name: text(1, 80, "Ponle un nombre a la rutina"),
+  notes: z.string().trim().max(500, "Las indicaciones admiten hasta 500 caracteres"),
+  days: z.array(routineDaySchema).min(1, "Agrega al menos un día").max(7, "Máximo 7 días"),
+});
+export type RoutineInput = z.infer<typeof routineSchema>;

@@ -420,3 +420,86 @@ export async function getProofFile(userId: string, id: string): Promise<ProofFil
     return rows[0] ?? null;
   });
 }
+
+// ---------------------------------------------------------------------------
+// Rutinas (iteración 4)
+// ---------------------------------------------------------------------------
+export type RoutineListRow = {
+  id: string;
+  studentId: string;
+  studentName: string;
+  name: string;
+  active: boolean;
+  updatedAt: Date;
+  days: number;
+  exercises: number;
+};
+
+export async function listRoutinesForPt(ptId: string): Promise<RoutineListRow[]> {
+  return withUser(ptId, async (c) => {
+    const { rows } = await c.query(
+      `select r.id, r.student_id as "studentId", u.name as "studentName", r.name, r.active,
+              r.updated_at as "updatedAt",
+              (select count(*) from routine_days d where d.routine_id = r.id)::int as days,
+              (select count(*) from routine_exercises e where e.routine_id = r.id)::int as exercises
+         from routines r join "user" u on u.id = r.student_id
+        order by r.active desc, lower(u.name), r.updated_at desc`,
+    );
+    return rows;
+  });
+}
+
+export type RoutineExercise = { name: string; sets: number; reps: string; note: string };
+export type RoutineDay = { title: string; exercises: RoutineExercise[] };
+export type RoutineFull = {
+  id: string;
+  studentId: string;
+  studentName: string;
+  name: string;
+  notes: string;
+  active: boolean;
+  updatedAt: Date;
+  days: RoutineDay[];
+};
+
+async function loadRoutine(c: import("pg").PoolClient, where: string, params: unknown[]): Promise<RoutineFull | null> {
+  const { rows } = await c.query(
+    `select r.id, r.student_id as "studentId", u.name as "studentName", r.name, coalesce(r.notes, '') as notes,
+            r.active, r.updated_at as "updatedAt"
+       from routines r join "user" u on u.id = r.student_id where ${where} limit 1`,
+    params,
+  );
+  const r = rows[0];
+  if (!r) return null;
+  const { rows: items } = await c.query(
+    `select d.position as dp, d.title, e.position as ep, e.name, e.sets, e.reps, coalesce(e.note, '') as note
+       from routine_days d left join routine_exercises e on e.day_id = d.id
+      where d.routine_id = $1 order by d.position, e.position`,
+    [r.id],
+  );
+  const days: RoutineDay[] = [];
+  for (const it of items) {
+    if (!days[it.dp - 1]) days[it.dp - 1] = { title: it.title, exercises: [] };
+    if (it.name) days[it.dp - 1].exercises.push({ name: it.name, sets: it.sets, reps: it.reps, note: it.note });
+  }
+  return { ...r, days: days.filter(Boolean) };
+}
+
+export async function getRoutine(userId: string, id: string): Promise<RoutineFull | null> {
+  return withUser(userId, (c) => loadRoutine(c, "r.id = $1", [id]));
+}
+
+/** La rutina activa de un alumno (la base solo le deja ver la suya). */
+export async function getActiveRoutine(studentId: string): Promise<RoutineFull | null> {
+  return withUser(studentId, (c) => loadRoutine(c, "r.student_id = $1 and r.active", [studentId]));
+}
+
+/** Nombres de ejercicios ya usados por el PT, para sugerirlos al escribir. */
+export async function listExerciseNames(ptId: string): Promise<string[]> {
+  return withUser(ptId, async (c) => {
+    const { rows } = await c.query(
+      `select name from routine_exercises group by name order by count(*) desc, name limit 200`,
+    );
+    return rows.map((r) => r.name as string);
+  });
+}

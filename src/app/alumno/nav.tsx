@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const ITEMS = [
   { href: "/alumno", label: "Inicio", exact: true },
   { href: "/alumno/reservar", label: "Reservar clase" },
+  { href: "/alumno/rutina", label: "Mi rutina" },
 ];
 
 export function StudentNav() {

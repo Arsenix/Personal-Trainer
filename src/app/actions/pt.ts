@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { audit, dbCode, isUniqueViolation, withUser } from "@/lib/db";
 import { requirePt } from "@/lib/session";
 import { generateToken, hashToken, INVITATION_TTL_DAYS } from "@/lib/tokens";
@@ -15,6 +16,7 @@ import {
   parseHourRanges,
   planSchema,
   profileSchema,
+  routineSchema,
 } from "@/lib/validation";
 import { notifyBooking } from "@/lib/agenda-mail";
 import { todayLocal } from "@/lib/dates";
@@ -569,4 +571,85 @@ export async function rejectProof(_prev: ActionState, fd: FormData): Promise<Act
   }
   refreshCredits();
   return { ok: true, message: "Comprobante rechazado." };
+}
+
+// ---------------------------------------------------------------------------
+// Rutinas (iteración 4)
+// ---------------------------------------------------------------------------
+export async function saveRoutine(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requirePt();
+  const id = str(fd, "id") || null;
+  const student = str(fd, "student");
+  if (id !== null && !UUID.test(id)) return { error: "Rutina no válida." };
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(str(fd, "days") || "[]");
+  } catch {
+    return { error: "No pudimos leer los ejercicios. Recarga la página e intenta de nuevo." };
+  }
+  const parsed = routineSchema.safeParse({ name: str(fd, "name"), notes: str(fd, "notes"), days: raw });
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { error: issue.message, errors: fieldErrors(parsed.error) };
+  }
+  try {
+    await withUser(user.id, (c) =>
+      c.query("select save_routine($1, $2, $3, $4, $5::jsonb)", [
+        id,
+        student,
+        parsed.data.name,
+        parsed.data.notes,
+        JSON.stringify(parsed.data.days),
+      ]),
+    );
+  } catch (e) {
+    switch (dbCode(e)) {
+      case "student_not_found":
+        return { error: "Ese alumno no es tuyo." };
+      case "routine_not_found":
+        return { error: "No encontramos esa rutina." };
+      case "routine_invalid":
+        return { error: "Revisa la rutina: hay datos fuera de rango." };
+      default:
+        console.error("saveRoutine", e);
+        return { error: "No pudimos guardar la rutina. Intenta de nuevo." };
+    }
+  }
+  revalidatePath("/pt/rutinas");
+  revalidatePath("/alumno", "layout");
+  redirect("/pt/rutinas?guardada=1");
+}
+
+export async function setRoutineActive(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requirePt();
+  const id = str(fd, "id");
+  const active = str(fd, "active") === "1";
+  if (!UUID.test(id)) return { error: "Rutina no válida." };
+  try {
+    await withUser(user.id, (c) => c.query("select set_routine_active($1, $2)", [id, active]));
+  } catch (e) {
+    console.error("setRoutineActive", e);
+    return { error: "No pudimos cambiar la rutina." };
+  }
+  revalidatePath("/pt/rutinas");
+  revalidatePath("/alumno", "layout");
+  return { ok: true, message: active ? "Rutina reactivada." : "Rutina archivada." };
+}
+
+export async function copyRoutine(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requirePt();
+  const id = str(fd, "id");
+  const student = str(fd, "student");
+  if (!UUID.test(id) || student === "") return { error: "Elige a qué alumno copiarla." };
+  try {
+    await withUser(user.id, (c) => c.query("select copy_routine($1, $2)", [id, student]));
+  } catch (e) {
+    if (dbCode(e) === "student_not_found") return { error: "Ese alumno no es tuyo." };
+    console.error("copyRoutine", e);
+    return { error: "No pudimos copiar la rutina." };
+  }
+  revalidatePath("/pt/rutinas");
+  revalidatePath("/alumno", "layout");
+  return { ok: true, message: "Rutina copiada. Ahora es la rutina activa de ese alumno." };
 }

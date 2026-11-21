@@ -120,6 +120,35 @@ async function main() {
     });
   }
 
+  // Una rutina de ejemplo para Matías.
+  const routineDays = [
+    {
+      title: "Día A · Piernas y empuje",
+      exercises: [
+        { name: "Sentadilla con barra", sets: 4, reps: "8-10", note: "Baja controlado, pausa de un segundo" },
+        { name: "Press banca", sets: 4, reps: "8", note: "" },
+        { name: "Peso muerto rumano", sets: 3, reps: "10", note: "Espalda neutra" },
+        { name: "Plancha", sets: 3, reps: "40 s", note: "" },
+      ],
+    },
+    {
+      title: "Día B · Espalda y brazos",
+      exercises: [
+        { name: "Dominadas asistidas", sets: 4, reps: "6-8", note: "" },
+        { name: "Remo con mancuerna", sets: 3, reps: "10", note: "Cada lado" },
+        { name: "Curl de bíceps", sets: 3, reps: "12", note: "" },
+      ],
+    },
+  ];
+  await withUser(ptId, (c) =>
+    c.query("select save_routine(null, $1, $2, $3, $4::jsonb)", [
+      studentIds["matias@demo.ptagenda.cl"],
+      "Fuerza, 4 semanas",
+      "Calienta 10 minutos antes de empezar y anota los pesos que usas.",
+      JSON.stringify(routineDays),
+    ]),
+  );
+
   console.log(`Listo. Ingresa con ${ptEmail} / ${PASSWORD}`);
   await appPool().end();
 }
