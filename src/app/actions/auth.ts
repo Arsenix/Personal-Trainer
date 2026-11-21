@@ -76,7 +76,9 @@ export async function acceptInvitation(
   _prev: ActionState,
   fd: FormData,
 ): Promise<ActionState> {
-  if (!(await allow("accept", 10, 10 * 60_000))) return TOO_MANY;
+  // Por IP con holgura (varios alumnos pueden compartir la wifi del gimnasio) y por invitación de forma estricta.
+  if (!(await allow("accept", 40, 10 * 60_000))) return TOO_MANY;
+  if (!(await allow("accept-token", 10, 10 * 60_000, hashToken(token).slice(0, 16)))) return TOO_MANY;
 
   const parsed = acceptInvitationSchema.safeParse({ password: str(fd, "password") });
   if (!parsed.success) return { errors: fieldErrors(parsed.error) };

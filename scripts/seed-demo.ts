@@ -1,7 +1,8 @@
 /**
  * Datos de demostración (solo desarrollo): un PT con lugares y alumnos.
  *   PT:      camila@demo.ptagenda.cl / DemoPass-2026
- *   Alumnos: matias@demo.ptagenda.cl, javiera@demo.ptagenda.cl / DemoPass-2026 (la invitación de Tomás queda pendiente)
+ *   Alumnos: matias@, javiera@ y valentina@demo.ptagenda.cl / DemoPass-2026 (la invitación de Tomás queda pendiente)
+ *   Valentina sube un comprobante y espera que el PT le active el mes (para mostrar el flujo de pago).
  * Es repetible: si el PT ya existe, no hace nada.
  */
 import { config } from "dotenv";
@@ -57,6 +58,7 @@ async function main() {
   const students = [
     ["Matías Fuentes", "matias@demo.ptagenda.cl", "+56 9 5555 0102", "Energy Gym Providencia", true],
     ["Javiera Soto", "javiera@demo.ptagenda.cl", "+56 9 5555 0103", "Domicilio de Javiera", true],
+    ["Valentina Paz", "valentina@demo.ptagenda.cl", "+56 9 5555 0104", "Energy Gym Providencia", true],
     ["Tomás Araya", "tomas@demo.ptagenda.cl", null, "Energy Gym Providencia", false],
   ] as const;
   const studentIds: Record<string, string> = {};
@@ -119,6 +121,15 @@ async function main() {
       await c.query("select book_class($1)", [rows[0].t]);
     });
   }
+
+  // Valentina ya transfirió: sube su comprobante y queda esperando que el PT le active el mes.
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  await withUser(studentIds["valentina@demo.ptagenda.cl"], (c) =>
+    c.query("select upload_proof($1, 'transferencia.png', 'image/png', $2)", [currentMonth(), png]),
+  );
 
   // Una rutina de ejemplo para Matías.
   const routineDays = [

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { addDays, currentMonth, mondayOf, monthLabel, todayLocal } from "../src/lib/dates";
-import { activateMonth, createPlan, inviteAndJoin, monthOfDate, newPage, registerPt, studentMonth } from "./helpers";
+import { activateMonth, createPlan, inviteAndJoin, mailsTo, monthOfDate, newPage, registerPt, studentMonth } from "./helpers";
 
 const run = `${Date.now().toString(36)}c`;
 const ptEmail = `credito.${run}@prueba.cl`;
@@ -57,11 +57,20 @@ test("el alumno sube un comprobante: solo se aceptan fotos y PDF reales", async 
   await card.getByRole("button", { name: "Enviar comprobante" }).click();
   await expect(card.getByText("En revisión")).toBeVisible();
   await expect(card.getByText(/Tu PT ya tiene tu comprobante/)).toBeVisible();
+
+  // El PT recibe un correo con el nombre del alumno y el mes.
+  await expect
+    .poll(async () => (await mailsTo(ptEmail)).map((m) => m.subject))
+    .toContainEqual(expect.stringContaining(`Comprobante de pago: ${name}`));
 });
 
 test("el PT ve el comprobante, solo él y el alumno pueden abrirlo, y puede rechazarlo", async ({ browser }) => {
   const p = pt.page;
+  // El resumen lista al alumno con el comprobante pendiente.
   await p.goto("/pt");
+  await expect(p.getByRole("region", { name: /Comprobantes por revisar/ })).toContainText(name);
+  await expect(p.getByRole("region", { name: /Comprobantes por revisar/ })).toContainText("1");
+  await p.goto("/pt/alumnos");
   await expect(p.getByText("Tienes 1 comprobante de pago por revisar.")).toBeVisible();
   const region = studentMonth(p, name, month);
   const link = region.getByRole("link", { name: /Ver transferencia\.png/ });
@@ -90,6 +99,9 @@ test("el PT ve el comprobante, solo él y el alumno pueden abrirlo, y puede rech
   await expect(monthCard().getByText("Rechazado")).toBeVisible();
   await expect(monthCard().getByText("Tu PT dice: No se ve el monto")).toBeVisible();
   await expect(monthCard().getByLabel("Comprobante de transferencia")).toBeVisible();
+
+  const rejected = (await mailsTo(`daniela.${run}@prueba.cl`)).find((m) => m.subject.includes("necesita una revisión"));
+  expect(rejected?.text).toContain("Motivo: No se ve el monto");
 });
 
 test("el alumno vuelve a subirlo, el PT activa el mes y se cargan los créditos del plan", async () => {
@@ -104,6 +116,10 @@ test("el alumno vuelve a subirlo, el PT activa el mes y se cargan los créditos 
   await st.page.goto("/alumno");
   await expect(monthCard().getByText("Activo", { exact: true })).toBeVisible();
   await expect(monthCard()).toContainText("4 de 4 clases disponibles");
+
+  const active = (await mailsTo(`daniela.${run}@prueba.cl`)).find((m) => m.subject.includes("está activo"));
+  expect(active?.text).toContain("Plan 4 clases");
+  expect(active?.text).toContain("4 clases disponibles");
 });
 
 test("cada clase gasta un crédito y al quedar en cero no se puede reservar más", async () => {
@@ -137,7 +153,7 @@ test("si cancela el PT el crédito vuelve, y el PT puede ajustar créditos con u
   await p.getByRole("button", { name: "Confirmar cancelación" }).click();
   await expect(p.getByText("3 clases reservadas")).toBeVisible();
 
-  await p.goto("/pt");
+  await p.goto("/pt/alumnos");
   const region = studentMonth(p, name, month);
   await expect(region).toContainText("1 de 4 clases disponibles");
   await region.getByText("Ajustar créditos").click();
@@ -159,7 +175,7 @@ test("si cancela el PT el crédito vuelve, y el PT puede ajustar créditos con u
 });
 
 test("los meses de la tarjeta son el actual y el siguiente", async () => {
-  await pt.page.goto("/pt");
+  await pt.page.goto("/pt/alumnos");
   await expect(
     pt.page.getByRole("listitem").filter({ hasText: name }).getByRole("heading", { name: new RegExp(monthLabel(currentMonth()), "i") }),
   ).toBeVisible();

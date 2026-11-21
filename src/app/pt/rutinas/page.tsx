@@ -35,7 +35,7 @@ export default async function RutinasPage({ searchParams }: { searchParams: Prom
       {students.length === 0 && (
         <p className="panel panel-pad text-muted">
           Para armar una rutina primero invita a un alumno desde{" "}
-          <Link href="/pt" className="underline underline-offset-4">
+          <Link href="/pt/alumnos" className="underline underline-offset-4">
             Alumnos
           </Link>
           .

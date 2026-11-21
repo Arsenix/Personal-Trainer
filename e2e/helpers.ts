@@ -1,4 +1,6 @@
 import { expect, type Browser, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { monthLabel } from "../src/lib/dates";
 
 export const PASSWORD = "clave-segura-2026";
@@ -19,7 +21,7 @@ export async function registerPt(page: Page, name: string, email: string) {
 
 /** El PT invita y el alumno crea su cuenta desde el link. Devuelve el contexto del alumno, ya con sesión. */
 export async function inviteAndJoin(pt: Page, browser: Browser, name: string, email: string) {
-  await pt.goto("/pt");
+  await pt.goto("/pt/alumnos");
   await pt.getByLabel("Nombre del alumno").fill(name);
   await pt.getByLabel("Correo", { exact: true }).fill(email);
   await pt.getByRole("button", { name: "Invitar alumno" }).click();
@@ -54,9 +56,23 @@ export function studentMonth(pt: Page, studentName: string, month: string) {
 
 /** El PT activa un mes con el primer plan de la lista. */
 export async function activateMonth(pt: Page, studentName: string, month: string) {
-  await pt.goto("/pt");
+  await pt.goto("/pt/alumnos");
   const region = studentMonth(pt, studentName, month);
   await region.getByLabel("Plan del mes").selectOption({ index: 1 });
   await region.getByRole("button", { name: "Activar mes" }).click();
   await expect(region.getByText("Activo", { exact: true })).toBeVisible();
+}
+
+/** Correos simulados que la app dejó para una dirección (la bandeja es un archivo, ver src/lib/mail.ts). */
+export async function mailsTo(email: string): Promise<{ subject: string; text: string }[]> {
+  try {
+    const raw = await readFile(join(process.cwd(), ".mail-outbox", "outbox.jsonl"), "utf8");
+    return raw
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as { to: string; subject: string; text: string })
+      .filter((m) => m.to.toLowerCase() === email.toLowerCase());
+  } catch {
+    return [];
+  }
 }

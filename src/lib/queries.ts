@@ -503,3 +503,21 @@ export async function listExerciseNames(ptId: string): Promise<string[]> {
     return rows.map((r) => r.name as string);
   });
 }
+
+export type StudentContact = { studentName: string; studentEmail: string; ptName: string; ptEmail: string };
+
+/** Contacto de un alumno y su PT, para los correos. Lo puede leer el propio alumno o su PT. */
+export async function getStudentContact(userId: string, studentId: string): Promise<StudentContact | null> {
+  return withUser(userId, async (c) => {
+    const { rows } = await c.query(
+      `select su.name as "studentName", su.email as "studentEmail", p.display_name as "ptName", pu.email as "ptEmail"
+         from students s
+         join "user" su on su.id = s.user_id
+         join "user" pu on pu.id = s.pt_id
+         join pt_profiles p on p.user_id = s.pt_id
+        where s.user_id = $1`,
+      [studentId],
+    );
+    return rows[0] ?? null;
+  });
+}

@@ -10,7 +10,8 @@ export type Mail = { to: string; subject: string; text: string };
 export async function sendMail(mail: Mail): Promise<boolean> {
   const key = process.env.RESEND_API_KEY;
   if (!key) {
-    if (process.env.NODE_ENV !== "production") {
+    // MAIL_OUTBOX=1 deja la bandeja simulada también con la app compilada (lo usan las pruebas e2e).
+    if (process.env.NODE_ENV !== "production" || process.env.MAIL_OUTBOX === "1") {
       console.log(`[correo simulado] a ${mail.to}: ${mail.subject}\n${mail.text}`);
       try {
         const dir = join(process.cwd(), ".mail-outbox");

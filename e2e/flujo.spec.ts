@@ -40,7 +40,7 @@ test("el registro valida los campos y no deja crear dos cuentas con el mismo cor
   await expect(page.getByText("Usa al menos 10 caracteres")).toBeVisible();
 
   await registerPt(page, ptEmail, "Camila Rojas");
-  await expect(page.getByRole("heading", { level: 1, name: "Alumnos" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Resumen" })).toBeVisible();
 
   const other = await newPage(browser);
   await other.page.goto("/registro");
@@ -162,6 +162,7 @@ test("el PT puede regenerar y revocar invitaciones", async ({ page, browser }) =
   await page.getByLabel("Contraseña").fill(PASSWORD);
   await page.getByRole("button", { name: "Ingresar" }).click();
   await expect(page).toHaveURL(/\/pt$/);
+  await page.goto("/pt/alumnos");
 
   await page.getByLabel("Nombre del alumno").fill("Javiera Soto");
   await page.getByLabel("Correo", { exact: true }).fill(`javiera.${run}@prueba.cl`);
@@ -184,6 +185,9 @@ test("el PT puede regenerar y revocar invitaciones", async ({ page, browser }) =
 test("un PT no ve a los alumnos de otro PT", async ({ browser }) => {
   const b = await newPage(browser);
   await registerPt(b.page, `otro.${run}@prueba.cl`, "Otro Entrenador");
+  await expect(b.page.getByText("Aún no tienes alumnos.")).toBeVisible();
+  await expect(b.page.getByText(studentName)).toHaveCount(0);
+  await b.page.goto("/pt/alumnos");
   await expect(b.page.getByText("Todavía no tienes alumnos")).toBeVisible();
   await expect(b.page.getByText(studentName)).toHaveCount(0);
   await b.page.goto("/pt/lugares");

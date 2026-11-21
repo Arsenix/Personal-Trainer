@@ -4,7 +4,7 @@ Agenda para personal trainers independientes. El PT publica sus horas (lunes a v
 
 Nombre provisorio. Stack: Next.js 16 · TypeScript · PostgreSQL 16 · Better Auth · Zod · Tailwind v4 · Vitest · Playwright.
 
-## Estado: iteración 4 (rutinas)
+## Estado: iteración 5 (avisos, panel del PT y demo)
 
 Iteración 1, identidad y alumnos:
 
@@ -39,7 +39,14 @@ Iteración 4, rutinas:
 - **Mi rutina** (`/alumno/rutina`): el alumno ve solo su rutina activa, en solo lectura. La base garantiza que no vea archivadas ni las de otros.
 - La rutina se guarda completa en una sola operación en la base (`save_routine`), que valida todo antes de escribir, y queda en la actividad.
 
-Todavía no incluye: seguimiento de lo que el alumno hizo en cada sesión, biblioteca de ejercicios con videos, avisos por correo al subir un comprobante y panel de pendientes (iteración 5), recordatorio de fin de mes. Tampoco hay recuperación de contraseña ni cobro de la plataforma a los PT.
+Iteración 5, avisos y panel:
+
+- **Resumen** (`/pt`, es lo primero que ve el PT al entrar): clases de hoy y de los próximos días, comprobantes por revisar, alumnos sin el mes activado, alumnos a los que les queda 1 clase o ninguna, y alumnos sin rutina. Cada fila lleva a la tarjeta del alumno en **Alumnos** (`/pt/alumnos`).
+- **Correos**: al PT cuando un alumno sube un comprobante; al alumno cuando el PT activa su mes o rechaza un comprobante (se suman a los de reservas y cancelaciones). Un fallo de envío nunca rompe la acción.
+- **Límite de invitaciones**: se cuenta por IP con holgura (varios alumnos pueden compartir la wifi del gimnasio) y de forma estricta por invitación. El límite por IP necesita que el proxy reenvíe `X-Forwarded-For`.
+- **Demo**: datos de ejemplo completos y una guía de 10 minutos en [`docs/DEMO.md`](docs/DEMO.md).
+
+Todavía no incluye: seguimiento de lo que el alumno hizo en cada sesión, biblioteca de ejercicios con videos, recordatorio de fin de mes, recuperación de contraseña ni cobro de la plataforma a los PT.
 
 ## Cómo correrlo en tu máquina
 
@@ -80,7 +87,7 @@ Las cuentas no se crean por la vía pública de Better Auth (`disableSignUp`). E
 ```powershell
 pnpm typecheck && pnpm lint
 pnpm test:unit      # RUT, tokens, validación, límite de intentos, fechas, tipo de archivo
-pnpm test:int       # PostgreSQL real: RLS, invitaciones, agenda, reservas simultáneas, créditos, comprobantes, rutinas, auditoría, permisos de roles (base pt_agenda_test)
+pnpm test:int       # PostgreSQL real: RLS, invitaciones, agenda, reservas simultáneas, créditos, comprobantes, rutinas, correos, auditoría, permisos de roles (base pt_agenda_test)
 pnpm build
 pnpm test:e2e       # navegador real: flujo PT y alumno completo (base pt_agenda_test, puerto 3100)
 ```

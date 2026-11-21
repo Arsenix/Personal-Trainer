@@ -19,6 +19,7 @@ import {
   routineSchema,
 } from "@/lib/validation";
 import { notifyBooking } from "@/lib/agenda-mail";
+import { notifyMonthActivated, notifyProofRejected } from "@/lib/credit-mail";
 import { todayLocal } from "@/lib/dates";
 import { formValues, str, type ActionState } from "@/lib/action-state";
 import { allow } from "@/lib/rate-limit";
@@ -82,7 +83,7 @@ export async function inviteStudent(_prev: ActionState, fd: FormData): Promise<A
       };
     }
     const { link, mailed } = await issueInvitation(user.id, parsed.data);
-    revalidatePath("/pt");
+    revalidatePath("/pt", "layout");
     return { ok: true, link, mailed, message: `Invitación lista para ${parsed.data.name}.` };
   } catch (e) {
     if (isUniqueViolation(e)) return { error: "Ya hay una invitación pendiente para este correo.", values };
@@ -108,7 +109,7 @@ export async function resendInvitation(_prev: ActionState, fd: FormData): Promis
   });
   if (!inv) return { error: "Esa invitación ya no está pendiente." };
   const { link, mailed } = await issueInvitation(user.id, inv);
-  revalidatePath("/pt");
+  revalidatePath("/pt", "layout");
   return { ok: true, link, mailed, message: `Nuevo link para ${inv.name}. El anterior dejó de funcionar.` };
 }
 
@@ -124,7 +125,7 @@ export async function revokeInvitation(_prev: ActionState, fd: FormData): Promis
     );
     if (rowCount) await audit(c, user.id, "invitation.revoked", "invitation", id);
   });
-  revalidatePath("/pt");
+  revalidatePath("/pt", "layout");
   return { ok: true };
 }
 
@@ -151,7 +152,7 @@ export async function createLocation(_prev: ActionState, fd: FormData): Promise<
     return { error: "No pudimos guardar el lugar.", values };
   }
   revalidatePath("/pt/lugares");
-  revalidatePath("/pt");
+  revalidatePath("/pt", "layout");
   return { ok: true, message: "Lugar agregado." };
 }
 
@@ -180,7 +181,7 @@ export async function updateLocation(_prev: ActionState, fd: FormData): Promise<
     return { error: "No pudimos guardar los cambios.", values };
   }
   revalidatePath("/pt/lugares");
-  revalidatePath("/pt");
+  revalidatePath("/pt", "layout");
   return { ok: true, message: "Cambios guardados." };
 }
 
@@ -206,7 +207,7 @@ export async function setLocationArchived(_prev: ActionState, fd: FormData): Pro
     throw e;
   }
   revalidatePath("/pt/lugares");
-  revalidatePath("/pt");
+  revalidatePath("/pt", "layout");
   return { ok: true };
 }
 
@@ -240,7 +241,7 @@ export async function setStudentLocation(_prev: ActionState, fd: FormData): Prom
     console.error("setStudentLocation", e);
     return { error: "No pudimos cambiar el lugar." };
   }
-  revalidatePath("/pt");
+  revalidatePath("/pt", "layout");
   return { ok: true };
 }
 
@@ -518,8 +519,16 @@ export async function activateMonth(_prev: ActionState, fd: FormData): Promise<A
         return { error: "No pudimos activar el mes. Intenta de nuevo." };
     }
   }
+  const plan = await withUser(user.id, async (c) => {
+    const { rows } = await c.query("select plan_name, credits from student_months where student_id = $1 and month = $2", [
+      parsed.data.student,
+      parsed.data.month,
+    ]);
+    return rows[0] as { plan_name: string; credits: number } | undefined;
+  });
+  if (plan) await notifyMonthActivated(user.id, parsed.data.student, parsed.data.month, plan.plan_name, plan.credits);
   refreshCredits();
-  return { ok: true, message: "Mes activado. Los créditos ya están cargados." };
+  return { ok: true, message: "Mes activado. Los créditos ya están cargados y le avisamos al alumno por correo." };
 }
 
 export async function adjustCredits(_prev: ActionState, fd: FormData): Promise<ActionState> {
@@ -559,8 +568,9 @@ export async function rejectProof(_prev: ActionState, fd: FormData): Promise<Act
   const user = await requirePt();
   const id = str(fd, "id");
   if (!/^[0-9a-f-]{36}$/i.test(id)) return { error: "Comprobante no válido." };
+  const note = str(fd, "note").trim().slice(0, 200) || null;
   try {
-    await withUser(user.id, (c) => c.query("select reject_proof($1, $2)", [id, str(fd, "note").slice(0, 200)]));
+    await withUser(user.id, (c) => c.query("select reject_proof($1, $2)", [id, note]));
   } catch (e) {
     if (dbCode(e) === "proof_not_found") {
       refreshCredits();
@@ -569,8 +579,13 @@ export async function rejectProof(_prev: ActionState, fd: FormData): Promise<Act
     console.error("rejectProof", e);
     return { error: "No pudimos rechazar el comprobante." };
   }
+  const who = await withUser(user.id, async (c) => {
+    const { rows } = await c.query("select student_id, to_char(month, 'YYYY-MM-DD') as month from payment_proofs where id = $1", [id]);
+    return rows[0] as { student_id: string; month: string } | undefined;
+  });
+  if (who) await notifyProofRejected(user.id, who.student_id, who.month, note);
   refreshCredits();
-  return { ok: true, message: "Comprobante rechazado." };
+  return { ok: true, message: "Comprobante rechazado. Le avisamos al alumno por correo." };
 }
 
 // ---------------------------------------------------------------------------

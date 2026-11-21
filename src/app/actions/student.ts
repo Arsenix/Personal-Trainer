@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { dbCode, withUser } from "@/lib/db";
 import { requireStudent } from "@/lib/session";
 import { notifyBooking } from "@/lib/agenda-mail";
+import { notifyProofUploaded } from "@/lib/credit-mail";
 import { str, type ActionState } from "@/lib/action-state";
 import { currentMonth, nextMonthOf } from "@/lib/dates";
 import { MAX_PROOF_BYTES, safeFileName, sniffProof } from "@/lib/files";
@@ -105,6 +106,7 @@ export async function uploadProof(_prev: ActionState, fd: FormData): Promise<Act
     console.error("uploadProof", e);
     return { error: "No pudimos guardar el comprobante. Intenta de nuevo." };
   }
+  await notifyProofUploaded(user.id, month);
   revalidatePath("/alumno", "layout");
   revalidatePath("/pt", "layout");
   return { ok: true, message: "Comprobante enviado. Tu PT lo revisará y activará el mes." };

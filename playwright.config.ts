@@ -16,6 +16,7 @@ const e2eEnv = {
   APP_URL: `http://localhost:${PORT}`,
   // Las pruebas crean muchos PT en pocos minutos; en producción el límite real es 5 cada 10 minutos.
   REGISTER_LIMIT_MAX: "100",
+  MAIL_OUTBOX: "1",
   RESEND_API_KEY: "",
 };
 Object.assign(process.env, e2eEnv);
