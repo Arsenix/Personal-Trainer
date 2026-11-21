@@ -15,7 +15,7 @@ const TOO_MANY: ActionState = { error: "Demasiados intentos. Espera un minuto y 
 
 export async function registerPt(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const values = formValues(fd);
-  if (!(await allow("register", 5, 10 * 60_000))) return { ...TOO_MANY, values };
+  if (!(await allow("register", Number(process.env.REGISTER_LIMIT_MAX) || 5, 10 * 60_000))) return { ...TOO_MANY, values };
 
   const parsed = registerSchema.safeParse({
     name: str(fd, "name"),

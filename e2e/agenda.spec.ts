@@ -1,32 +1,11 @@
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { addDays, mondayOf, todayLocal } from "../src/lib/dates";
+import { activateMonth, createPlan, inviteAndJoin, monthOfDate, newPage, registerPt } from "./helpers";
 
-const PASSWORD = "clave-segura-2026";
 const run = `${Date.now().toString(36)}a`;
 const ptEmail = `entrenadora.${run}@prueba.cl`;
 const nextMonday = addDays(mondayOf(todayLocal()), 7);
 const thursday = addDays(nextMonday, 3);
-
-async function newPage(browser: Browser) {
-  const ctx = await browser.newContext({ locale: "es-CL", timezoneId: "America/Santiago" });
-  return { ctx, page: await ctx.newPage() };
-}
-
-/** El PT invita y el alumno crea su cuenta desde el link. Devuelve la página del alumno ya con sesión. */
-async function inviteAndJoin(pt: Page, browser: Browser, name: string, email: string) {
-  await pt.goto("/pt");
-  await pt.getByLabel("Nombre del alumno").fill(name);
-  await pt.getByLabel("Correo", { exact: true }).fill(email);
-  await pt.getByRole("button", { name: "Invitar alumno" }).click();
-  const link = await pt.getByLabel("Link de invitación").first().inputValue();
-  const s = await newPage(browser);
-  await s.page.goto(link);
-  await s.page.getByLabel("Crea tu contraseña").fill(PASSWORD);
-  await s.page.getByLabel("Repítela").fill(PASSWORD);
-  await s.page.getByRole("button", { name: "Entrar a mi cuenta" }).click();
-  await expect(s.page).toHaveURL(/\/alumno$/);
-  return s;
-}
 
 test.describe.configure({ mode: "serial" });
 
@@ -36,12 +15,7 @@ let pt: Awaited<ReturnType<typeof newPage>>;
 
 test("el PT parte con un horario de lunes a viernes de 06:00 a 22:00", async ({ browser }) => {
   pt = await newPage(browser);
-  await pt.page.goto("/registro");
-  await pt.page.getByLabel("Tu nombre").fill("Valentina Mora");
-  await pt.page.getByLabel("Correo").fill(ptEmail);
-  await pt.page.getByLabel("Contraseña").fill(PASSWORD);
-  await pt.page.getByRole("button", { name: "Crear cuenta de PT" }).click();
-  await expect(pt.page).toHaveURL(/\/pt$/);
+  await registerPt(pt.page, "Valentina Mora", ptEmail);
 
   await pt.page.goto(`/pt/agenda?semana=${nextMonday}`);
   await expect(pt.page.getByRole("heading", { level: 1, name: "Agenda" })).toBeVisible();
@@ -54,6 +28,13 @@ test("el PT parte con un horario de lunes a viernes de 06:00 a 22:00", async ({ 
 
   student1 = await inviteAndJoin(pt.page, browser, "Matías Fuentes", `matias.${run}@prueba.cl`);
   student2 = await inviteAndJoin(pt.page, browser, "Javiera Soto", `javiera.${run}@prueba.cl`);
+
+  // Sin mes activado no se puede reservar: el PT crea un plan y activa los meses que toca la semana de prueba.
+  await createPlan(pt.page, "Plan 20", 20, "200000");
+  for (const month of new Set([monthOfDate(nextMonday), monthOfDate(addDays(nextMonday, 4))])) {
+    await activateMonth(pt.page, "Matías Fuentes", month);
+    await activateMonth(pt.page, "Javiera Soto", month);
+  }
 });
 
 test("el alumno elige un horario, confirma y la clase queda reservada", async () => {

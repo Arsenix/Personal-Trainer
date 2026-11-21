@@ -1,8 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StudentCancelForm } from "@/components/agenda";
-import { canStudentCancel, slotLong } from "@/lib/dates";
-import { getStudentHome, listStudentBookings, type BookingStatus } from "@/lib/queries";
+import { StudentCredits } from "@/components/student-months";
+import { canStudentCancel, currentMonth, nextMonthOf, slotLong } from "@/lib/dates";
+import {
+  getStudentHome,
+  listLedger,
+  listMonthsForStudent,
+  listProofsForStudent,
+  listStudentBookings,
+  type BookingStatus,
+} from "@/lib/queries";
 import { requireStudent } from "@/lib/session";
 import { ACCOUNT_TYPE_LABEL, KIND_LABEL } from "@/lib/validation";
 
@@ -16,9 +24,13 @@ const STATUS_LABEL: Record<BookingStatus, string> = {
 
 export default async function AlumnoPage() {
   const user = await requireStudent();
-  const [home, { upcoming, history }] = await Promise.all([
+  const months = [currentMonth(), nextMonthOf(currentMonth())];
+  const [home, { upcoming, history }, monthRows, proofs, ledger] = await Promise.all([
     getStudentHome(user.id),
     listStudentBookings(user.id),
+    listMonthsForStudent(user.id, months),
+    listProofsForStudent(user.id, months),
+    listLedger(user.id, months, user.id),
   ]);
   if (!home) notFound();
   const now = new Date();
@@ -60,7 +72,7 @@ export default async function AlumnoPage() {
             {upcoming.map((b) => (
               <li key={b.id} className="panel grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-start">
                 <div className="min-w-0">
-                  <p className="font-semibold capitalize">{slotLong(b.start)}</p>
+                  <p className="font-semibold first-cap">{slotLong(b.start)}</p>
                   <p className="text-sm text-muted">{b.locationName ?? home.locationName ?? "Lugar por definir"}</p>
                 </div>
                 <StudentCancelForm id={b.id} canCancel={canStudentCancel(b.start, now)} />
@@ -70,18 +82,7 @@ export default async function AlumnoPage() {
         )}
       </section>
 
-      <section className="panel panel-pad grid gap-1" aria-labelledby="lugar">
-        <h2 id="lugar">Dónde entrenas</h2>
-        {home.locationName ? (
-          <p className="mt-2">
-            <span className="font-semibold">{home.locationName}</span>
-            {home.locationKind && <span className="text-muted"> · {KIND_LABEL[home.locationKind]}</span>}
-            {home.locationAddress && <span className="block text-muted">{home.locationAddress}</span>}
-          </p>
-        ) : (
-          <p className="mt-2 text-muted">Tu PT aún no define el lugar.</p>
-        )}
-      </section>
+      <StudentCredits months={months} rows={monthRows} proofs={proofs} ledger={ledger} />
 
       <section className="panel panel-pad grid gap-3" aria-labelledby="pago">
         <h2 id="pago">Cómo pagar tu plan</h2>
@@ -108,21 +109,32 @@ export default async function AlumnoPage() {
         )}
       </section>
 
+      <section className="panel panel-pad grid gap-1" aria-labelledby="lugar">
+        <h2 id="lugar">Dónde entrenas</h2>
+        {home.locationName ? (
+          <p className="mt-2">
+            <span className="font-semibold">{home.locationName}</span>
+            {home.locationKind && <span className="text-muted"> · {KIND_LABEL[home.locationKind]}</span>}
+            {home.locationAddress && <span className="block text-muted">{home.locationAddress}</span>}
+          </p>
+        ) : (
+          <p className="mt-2 text-muted">Tu PT aún no define el lugar.</p>
+        )}
+      </section>
+
       {history.length > 0 && (
         <section aria-labelledby="anteriores" className="grid gap-3">
           <h2 id="anteriores">Clases anteriores</h2>
           <ul className="panel divide-y divide-line">
             {history.map((b) => (
               <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-                <span className="capitalize">{slotLong(b.start)}</span>
+                <span className="first-cap">{slotLong(b.start)}</span>
                 <span className="tag">{STATUS_LABEL[b.status]}</span>
               </li>
             ))}
           </ul>
         </section>
       )}
-
-      <p className="text-sm text-muted">Muy pronto verás aquí también tus créditos del mes.</p>
     </div>
   );
 }

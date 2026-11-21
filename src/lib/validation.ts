@@ -159,3 +159,38 @@ export const blockSchema = z
     reason: optionalText(120),
   })
   .refine((v) => v.to > v.from, { path: ["to"], message: "El término debe ser después del inicio" });
+
+// ---------------------------------------------------------------------------
+// Planes y créditos (iteración 3)
+// ---------------------------------------------------------------------------
+const intField = (min: number, max: number, msg: string) =>
+  z
+    .string()
+    .trim()
+    .regex(/^-?\d+$/, msg)
+    .transform(Number)
+    .pipe(z.number().int().min(min, msg).max(max, msg));
+
+export const planSchema = z.object({
+  name: text(1, 60, "Ponle un nombre al plan"),
+  credits: intField(1, 60, "Entre 1 y 60 clases"),
+  // El precio puede venir con puntos de miles ("80.000").
+  price: z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/[.\s$]/g, ""))
+    .pipe(intField(0, 100000000, "Ingresa un precio válido en pesos")),
+});
+
+export const activateSchema = z.object({
+  student: z.string().trim().min(1).max(64),
+  month: z.string().regex(/^\d{4}-\d{2}-01$/, "Mes no válido"),
+  plan: z.uuid("Elige un plan"),
+});
+
+export const adjustSchema = z.object({
+  student: z.string().trim().min(1).max(64),
+  month: z.string().regex(/^\d{4}-\d{2}-01$/, "Mes no válido"),
+  delta: intField(-60, 60, "Ingresa un número entre -60 y 60").refine((n) => n !== 0, "No puede ser 0"),
+  note: text(2, 200, "Cuenta brevemente el motivo"),
+});

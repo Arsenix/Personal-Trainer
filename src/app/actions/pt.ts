@@ -6,11 +6,14 @@ import { requirePt } from "@/lib/session";
 import { generateToken, hashToken, INVITATION_TTL_DAYS } from "@/lib/tokens";
 import { appUrl, sendMail } from "@/lib/mail";
 import {
+  activateSchema,
+  adjustSchema,
   blockSchema,
   fieldErrors,
   inviteSchema,
   locationSchema,
   parseHourRanges,
+  planSchema,
   profileSchema,
 } from "@/lib/validation";
 import { notifyBooking } from "@/lib/agenda-mail";
@@ -439,4 +442,131 @@ export async function cancelBookingAsPt(_prev: ActionState, fd: FormData): Promi
   await notifyBooking(user.id, id, "cancelled_by_pt");
   refreshAgenda();
   return { ok: true, message: "Clase cancelada. Le avisamos al alumno por correo." };
+}
+
+// ---------------------------------------------------------------------------
+// Planes, activación del mes y créditos (iteración 3)
+// ---------------------------------------------------------------------------
+function refreshCredits() {
+  revalidatePath("/pt", "layout");
+  revalidatePath("/alumno", "layout");
+}
+
+export async function savePlan(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requirePt();
+  const parsed = planSchema.safeParse({ name: str(fd, "name"), credits: str(fd, "credits"), price: str(fd, "price") });
+  if (!parsed.success) return { errors: fieldErrors(parsed.error), values: formValues(fd) };
+  const id = str(fd, "id") || null;
+  if (id !== null && !/^[0-9a-f-]{36}$/i.test(id)) return { error: "Plan no válido." };
+  try {
+    await withUser(user.id, (c) =>
+      c.query("select save_plan($1, $2, $3, $4, null)", [id, parsed.data.name, parsed.data.credits, parsed.data.price]),
+    );
+  } catch (e) {
+    if (dbCode(e) === "plan_name_taken") {
+      return { errors: { name: "Ya tienes un plan con ese nombre." }, values: formValues(fd) };
+    }
+    console.error("savePlan", e);
+    return { error: "No pudimos guardar el plan. Intenta de nuevo." };
+  }
+  refreshCredits();
+  return { ok: true, message: id ? "Plan actualizado." : "Plan creado." };
+}
+
+export async function setPlanActive(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requirePt();
+  const id = str(fd, "id");
+  const active = str(fd, "active") === "1";
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return { error: "Plan no válido." };
+  try {
+    await withUser(user.id, async (c) => {
+      const { rows } = await c.query("select name, credits, price_clp from plans where id = $1", [id]);
+      if (!rows[0]) throw new Error("plan_not_found");
+      await c.query("select save_plan($1, $2, $3, $4, $5)", [id, rows[0].name, rows[0].credits, rows[0].price_clp, active]);
+    });
+  } catch (e) {
+    console.error("setPlanActive", e);
+    return { error: "No pudimos cambiar el plan." };
+  }
+  refreshCredits();
+  return { ok: true, message: active ? "Plan restaurado." : "Plan archivado." };
+}
+
+export async function activateMonth(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requirePt();
+  const parsed = activateSchema.safeParse({ student: str(fd, "student"), month: str(fd, "month"), plan: str(fd, "plan") });
+  if (!parsed.success) return { errors: fieldErrors(parsed.error), values: formValues(fd) };
+  try {
+    await withUser(user.id, (c) =>
+      c.query("select activate_month($1, $2, $3)", [parsed.data.student, parsed.data.month, parsed.data.plan]),
+    );
+  } catch (e) {
+    switch (dbCode(e)) {
+      case "already_active":
+        refreshCredits();
+        return { error: "Ese mes ya estaba activado." };
+      case "plan_not_found":
+        return { errors: { plan: "Ese plan ya no está disponible." } };
+      case "month_invalid":
+        return { error: "Solo se puede activar el mes en curso o el siguiente." };
+      case "student_not_found":
+        return { error: "No encontramos a ese alumno." };
+      default:
+        console.error("activateMonth", e);
+        return { error: "No pudimos activar el mes. Intenta de nuevo." };
+    }
+  }
+  refreshCredits();
+  return { ok: true, message: "Mes activado. Los créditos ya están cargados." };
+}
+
+export async function adjustCredits(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requirePt();
+  const parsed = adjustSchema.safeParse({
+    student: str(fd, "student"),
+    month: str(fd, "month"),
+    delta: str(fd, "delta"),
+    note: str(fd, "note"),
+  });
+  if (!parsed.success) return { errors: fieldErrors(parsed.error), values: formValues(fd) };
+  try {
+    await withUser(user.id, (c) =>
+      c.query("select adjust_credits($1, $2, $3, $4)", [
+        parsed.data.student,
+        parsed.data.month,
+        parsed.data.delta,
+        parsed.data.note,
+      ]),
+    );
+  } catch (e) {
+    switch (dbCode(e)) {
+      case "balance_negative":
+        return { errors: { delta: "El alumno no tiene tantos créditos para descontar." }, values: formValues(fd) };
+      case "month_not_active":
+        return { error: "Ese mes no está activado." };
+      default:
+        console.error("adjustCredits", e);
+        return { error: "No pudimos ajustar los créditos. Intenta de nuevo." };
+    }
+  }
+  refreshCredits();
+  return { ok: true, message: "Créditos ajustados." };
+}
+
+export async function rejectProof(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requirePt();
+  const id = str(fd, "id");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return { error: "Comprobante no válido." };
+  try {
+    await withUser(user.id, (c) => c.query("select reject_proof($1, $2)", [id, str(fd, "note").slice(0, 200)]));
+  } catch (e) {
+    if (dbCode(e) === "proof_not_found") {
+      refreshCredits();
+      return { error: "Ese comprobante ya fue revisado." };
+    }
+    console.error("rejectProof", e);
+    return { error: "No pudimos rechazar el comprobante." };
+  }
+  refreshCredits();
+  return { ok: true, message: "Comprobante rechazado." };
 }

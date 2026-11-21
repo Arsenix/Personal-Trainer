@@ -79,7 +79,7 @@ export default async function AgendaPage({ searchParams }: { searchParams: Promi
               <section key={date} aria-labelledby={`d-${date}`} className="min-w-0">
                 <h2
                   id={`d-${date}`}
-                  className={`mb-2 flex items-center gap-2 border-b-2 pb-1 text-base capitalize ${
+                  className={`mb-2 flex items-center gap-2 border-b-2 pb-1 text-base first-cap ${
                     date === today ? "border-ink" : "border-line"
                   }`}
                 >

@@ -72,6 +72,30 @@ beforeAll(async () => {
   nextMonday = (
     await admin.query(`select (date_trunc('week', now() at time zone $1) + interval '7 days')::date::text as d`, [TZ])
   ).rows[0].d;
+  // Estas pruebas son de agenda, no de créditos: todos los alumnos parten con créditos de sobra en los
+  // meses que alcanza el horizonte de reserva (los créditos se prueban en creditos.test.ts).
+  for (const [pt, st] of [
+    [ids.ptA, ids.stA1],
+    [ids.ptA, ids.stA2],
+    [ids.ptB, ids.stB1],
+  ]) {
+    for (const k of [0, 1, 2]) {
+      const m = (
+        await admin.query(
+          `select (date_trunc('month', now() at time zone $1) + make_interval(months => $2))::date::text as m`,
+          [TZ, k],
+        )
+      ).rows[0].m;
+      await admin.query(
+        `insert into student_months (pt_id, student_id, month, plan_name, price_clp, credits) values ($1,$2,$3,'Prueba',0,60)`,
+        [pt, st, m],
+      );
+      await admin.query(
+        `insert into credit_ledger (student_id, pt_id, month, delta, reason) values ($1,$2,$3,60,'activation')`,
+        [st, pt, m],
+      );
+    }
+  }
 });
 
 afterAll(async () => {

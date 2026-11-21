@@ -235,7 +235,7 @@ export function ReserveWeek({ days }: { days: ReserveDay[] }) {
       <FormMessage state={state} />
       {days.map((d) => (
         <section key={d.date} aria-labelledby={`dia-${d.date}`} className="grid gap-3">
-          <h2 id={`dia-${d.date}`} className="text-lg capitalize">
+          <h2 id={`dia-${d.date}`} className="text-lg first-cap">
             {d.label}
           </h2>
           {d.slots.length === 0 ? (
@@ -274,7 +274,7 @@ export function ReserveWeek({ days }: { days: ReserveDay[] }) {
           <input type="hidden" name="start" value={current.start} />
           <p className="min-w-0 text-sm">
             <span className="block text-[#9aa7b0]">Vas a reservar</span>
-            <span className="font-semibold capitalize">{current.long}</span>
+            <span className="font-semibold first-cap">{current.long}</span>
           </p>
           <div className="flex gap-2">
             <button type="button" className="btn btn-quiet !border-[#3a4650] !text-paper" onClick={() => setSelected(null)}>

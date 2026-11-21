@@ -4,7 +4,7 @@ Agenda para personal trainers independientes. El PT publica sus horas (lunes a v
 
 Nombre provisorio. Stack: Next.js 16 · TypeScript · PostgreSQL 16 · Better Auth · Zod · Tailwind v4 · Vitest · Playwright.
 
-## Estado: iteración 2 (disponibilidad y reservas)
+## Estado: iteración 3 (planes, créditos y comprobantes)
 
 Iteración 1, identidad y alumnos:
 
@@ -24,7 +24,15 @@ Iteración 2, disponibilidad y reservas:
 - Las reglas viven en la base: no hay dos clases en la misma hora de un PT (restricción de exclusión, probada con reservas simultáneas), horario `America/Santiago` con cambio de hora, y RLS para que cada uno vea solo lo suyo.
 - Requiere la extensión `btree_gist` (viene en `postgresql-contrib`); el usuario que corre las migraciones debe poder crearla.
 
-Todavía no incluye: que la reserva dependa de créditos o de un mes activado, créditos, planes y cancelación con 24 horas (iteración 3), rutinas (iteración 4), notificaciones por correo de clases y panel de agenda (iteración 5). Tampoco hay recuperación de contraseña ni cobro de la plataforma a los PT.
+Iteración 3, planes, créditos y comprobantes:
+
+- **Planes** (`/pt/planes`): cada PT define los suyos (nombre, clases al mes, precio en CLP). Se pueden editar y archivar. El alumno no elige plan.
+- **Activar el mes**: en la tarjeta de cada alumno (`/pt`) el PT activa el mes en curso o el siguiente eligiendo un plan. El precio y los créditos se **copian** al mes: cambiar el plan después no altera lo ya activado.
+- **Créditos**: 1 crédito = 1 clase y son del mes calendario de la clase. Sin mes activado o sin saldo no se puede reservar; lo que sobra al cambiar de mes se pierde (no hay arrastre ni proceso de vencimiento, porque el saldo es por mes). Si el alumno cancela con 24 horas o más, el crédito vuelve; con menos no puede cancelar y el crédito queda consumido; si cancela el PT, o bloquea la agenda, siempre vuelve. El PT puede ajustar créditos con un motivo y todo queda en un libro de movimientos que el alumno también ve.
+- **Comprobante de transferencia**: el alumno sube una foto o PDF (hasta 5 MB) en su inicio. El tipo se verifica por el contenido del archivo y se vuelve a validar en la base. El PT lo abre (solo él y el alumno pueden), lo rechaza con un motivo o activa el mes, y al activar los pendientes quedan aceptados.
+- Los comprobantes se guardan en la base (bytea). Para un volumen alto conviene pasarlos a almacenamiento de objetos.
+
+Todavía no incluye: avisos por correo al subir un comprobante y panel de pendientes (iteración 5), recordatorio de fin de mes, rutinas (iteración 4). Tampoco hay recuperación de contraseña ni cobro de la plataforma a los PT.
 
 ## Cómo correrlo en tu máquina
 
@@ -64,8 +72,8 @@ Las cuentas no se crean por la vía pública de Better Auth (`disableSignUp`). E
 
 ```powershell
 pnpm typecheck && pnpm lint
-pnpm test:unit      # RUT, tokens, validación, límite de intentos, fechas
-pnpm test:int       # PostgreSQL real: RLS, invitaciones, agenda, reservas simultáneas, auditoría, permisos de roles (base pt_agenda_test)
+pnpm test:unit      # RUT, tokens, validación, límite de intentos, fechas, tipo de archivo
+pnpm test:int       # PostgreSQL real: RLS, invitaciones, agenda, reservas simultáneas, créditos, comprobantes, auditoría, permisos de roles (base pt_agenda_test)
 pnpm build
 pnpm test:e2e       # navegador real: flujo PT y alumno completo (base pt_agenda_test, puerto 3100)
 ```

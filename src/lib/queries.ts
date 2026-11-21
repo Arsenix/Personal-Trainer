@@ -295,3 +295,128 @@ export async function getBookingContact(userId: string, bookingId: string): Prom
     return rows[0] ?? null;
   });
 }
+
+// ---------------------------------------------------------------------------
+// Planes, meses y créditos (iteración 3)
+// ---------------------------------------------------------------------------
+export type PlanRow = { id: string; name: string; credits: number; priceClp: number; active: boolean };
+
+export async function listPlans(ptId: string): Promise<PlanRow[]> {
+  return withUser(ptId, async (c) => {
+    const { rows } = await c.query(
+      `select id, name, credits, price_clp as "priceClp", active from plans order by active desc, lower(name)`,
+    );
+    return rows;
+  });
+}
+
+export type MonthRow = {
+  studentId: string;
+  month: string;
+  planName: string;
+  priceClp: number;
+  /** Créditos cargados en el mes (plan más ajustes). */
+  loaded: number;
+  /** Créditos que quedan para reservar. */
+  balance: number;
+};
+
+const MONTH_SELECT = `
+  select m.student_id as "studentId", to_char(m.month, 'YYYY-MM-DD') as month,
+         m.plan_name as "planName", m.price_clp as "priceClp",
+         coalesce(sum(l.delta) filter (where l.reason in ('activation', 'adjustment')), 0)::int as loaded,
+         coalesce(sum(l.delta), 0)::int as balance
+    from student_months m
+    left join credit_ledger l on l.student_id = m.student_id and l.month = m.month`;
+
+/** Meses activados de los alumnos del PT (la RLS limita a los suyos). */
+export async function listMonthsForPt(ptId: string, months: string[]): Promise<MonthRow[]> {
+  return withUser(ptId, async (c) => {
+    const { rows } = await c.query(
+      `${MONTH_SELECT} where m.month = any($1::date[]) group by m.id`,
+      [months],
+    );
+    return rows;
+  });
+}
+
+export async function listMonthsForStudent(studentId: string, months: string[]): Promise<MonthRow[]> {
+  return withUser(studentId, async (c) => {
+    const { rows } = await c.query(
+      `${MONTH_SELECT} where m.student_id = $2 and m.month = any($1::date[]) group by m.id`,
+      [months, studentId],
+    );
+    return rows;
+  });
+}
+
+export type ProofStatus = "pending" | "accepted" | "rejected";
+export type ProofRow = {
+  id: string;
+  studentId: string;
+  month: string;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  status: ProofStatus;
+  note: string | null;
+  createdAt: Date;
+};
+
+const PROOF_SELECT = `
+  select id, student_id as "studentId", to_char(month, 'YYYY-MM-DD') as month, file_name as "fileName",
+         mime, size_bytes as "sizeBytes", status, note, created_at as "createdAt"
+    from payment_proofs`;
+
+/** Comprobantes pendientes de revisar de todos los alumnos del PT. */
+export async function listPendingProofs(ptId: string): Promise<ProofRow[]> {
+  return withUser(ptId, async (c) => {
+    const { rows } = await c.query(`${PROOF_SELECT} where status = 'pending' order by created_at`);
+    return rows;
+  });
+}
+
+export async function listProofsForStudent(studentId: string, months: string[]): Promise<ProofRow[]> {
+  return withUser(studentId, async (c) => {
+    const { rows } = await c.query(
+      `${PROOF_SELECT} where student_id = $2 and month = any($1::date[]) order by created_at desc`,
+      [months, studentId],
+    );
+    return rows;
+  });
+}
+
+export type LedgerRow = {
+  studentId: string;
+  month: string;
+  delta: number;
+  reason: "activation" | "adjustment" | "booking" | "refund";
+  note: string | null;
+  createdAt: Date;
+};
+
+export async function listLedger(userId: string, months: string[], studentId?: string): Promise<LedgerRow[]> {
+  return withUser(userId, async (c) => {
+    const { rows } = await c.query(
+      `select student_id as "studentId", to_char(month, 'YYYY-MM-DD') as month, delta, reason, note,
+              created_at as "createdAt"
+         from credit_ledger
+        where month = any($1::date[]) and ($2::text is null or student_id = $2)
+        order by created_at desc, id desc`,
+      [months, studentId ?? null],
+    );
+    return rows;
+  });
+}
+
+export type ProofFile = { fileName: string; mime: string; data: Buffer };
+
+export async function getProofFile(userId: string, id: string): Promise<ProofFile | null> {
+  return withUser(userId, async (c) => {
+    const { rows } = await c.query(
+      `select file_name as "fileName", mime, data from payment_proofs where id = $1`,
+      [id],
+    );
+    return rows[0] ?? null;
+  });
+}

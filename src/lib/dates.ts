@@ -108,3 +108,27 @@ export const CANCEL_LIMIT_HOURS = 24;
 export function canStudentCancel(start: Date, now: Date = new Date()): boolean {
   return start.getTime() - now.getTime() >= CANCEL_LIMIT_HOURS * 3_600_000;
 }
+
+// ---------------------------------------------------------------------------
+// Meses de créditos (iteración 3): un mes se identifica por su primer día, YYYY-MM-01
+// ---------------------------------------------------------------------------
+export function currentMonth(now: Date = new Date()): string {
+  return `${todayLocal(now).slice(0, 7)}-01`;
+}
+
+export function nextMonthOf(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return m === 12 ? `${y + 1}-01-01` : `${y}-${pad(m + 1)}-01`;
+}
+
+export function isMonthString(s: string | undefined | null): s is string {
+  return !!s && /^\d{4}-(0[1-9]|1[0-2])-01$/.test(s);
+}
+
+/** "noviembre 2026" */
+export function monthLabel(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return new Intl.DateTimeFormat("es-CL", { timeZone: "UTC", month: "long", year: "numeric" }).format(
+    new Date(Date.UTC(y, m - 1, 1)),
+  );
+}

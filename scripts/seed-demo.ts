@@ -86,6 +86,29 @@ async function main() {
     ["javiera@demo.ptagenda.cl", 2, 18],
     ["javiera@demo.ptagenda.cl", 4, 19],
   ];
+
+  // Planes del PT y mes activado para los alumnos que tienen clases reservadas.
+  const planIds: Record<string, string> = {};
+  for (const [name, credits, price] of [
+    ["Plan 4 clases", 4, 44000],
+    ["Plan 8 clases", 8, 80000],
+    ["Plan 12 clases", 12, 108000],
+  ] as const) {
+    const { rows } = await withUser(ptId, (c) => c.query("select save_plan(null, $1, $2, $3, true) as id", [name, credits, price]));
+    planIds[name] = rows[0].id;
+  }
+  const plansFor: Record<string, string> = {
+    "matias@demo.ptagenda.cl": "Plan 8 clases",
+    "javiera@demo.ptagenda.cl": "Plan 12 clases",
+  };
+  const { currentMonth } = await import("../src/lib/dates");
+  const months = new Set<string>([currentMonth(), ...bookings.map(([, d]) => `${addDays(nextMonday, d).slice(0, 7)}-01`)]);
+  for (const [email, plan] of Object.entries(plansFor)) {
+    for (const month of months) {
+      await withUser(ptId, (c) => c.query("select activate_month($1, $2, $3)", [studentIds[email], month, planIds[plan]]));
+    }
+  }
+
   for (const [email, dayOffset, hour] of bookings) {
     const day = addDays(nextMonday, dayOffset);
     await withUser(studentIds[email], async (c) => {

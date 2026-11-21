@@ -27,6 +27,12 @@ const AUDIT_LABELS: Record<string, string> = {
   "booking.created": "Reservó una clase",
   "booking.cancelled_by_student": "Canceló una clase",
   "booking.cancelled_by_pt": "Canceló clases",
+  "plan.created": "Creó un plan",
+  "plan.updated": "Editó un plan",
+  "month.activated": "Activó el mes de un alumno",
+  "credits.adjusted": "Ajustó los créditos de un alumno",
+  "proof.uploaded": "Subió un comprobante de pago",
+  "proof.rejected": "Rechazó un comprobante de pago",
   "availability.updated": "Cambió su horario de atención",
   "availability.blocked": "Bloqueó horas de su agenda",
   "availability.unblocked": "Quitó un bloqueo de su agenda",
@@ -34,4 +40,8 @@ const AUDIT_LABELS: Record<string, string> = {
 
 export function auditLabel(action: string): string {
   return AUDIT_LABELS[action] ?? action;
+}
+
+export function formatClp(n: number): string {
+  return new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(n);
 }

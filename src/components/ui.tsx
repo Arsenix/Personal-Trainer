@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
 import type { ActionState } from "@/lib/action-state";
 
@@ -46,7 +46,9 @@ export function Field({
   maxLength?: number;
 }) {
   const error = state?.errors?.[name];
-  const id = `f-${name}`;
+  // Único por instancia: una página puede tener varios formularios con el mismo campo.
+  const uid = useId().replace(/:/g, "");
+  const id = `f-${name}-${uid}`;
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
@@ -93,7 +95,9 @@ export function SelectField({
   hint?: string;
 }) {
   const error = state?.errors?.[name];
-  const id = `f-${name}`;
+  // Único por instancia: una página puede tener varios formularios con el mismo campo.
+  const uid = useId().replace(/:/g, "");
+  const id = `f-${name}-${uid}`;
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>

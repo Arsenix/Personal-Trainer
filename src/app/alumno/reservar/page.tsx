@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ReserveWeek, type ReserveDay } from "@/components/agenda";
-import { getStudentHome, listSlots } from "@/lib/queries";
+import { getStudentHome, listMonthsForStudent, listSlots } from "@/lib/queries";
 import { requireStudent } from "@/lib/session";
-import { addDays, dayLong, mondayOf, slotLong, todayLocal, weekDays, weekFromParam, weekRangeLabel } from "@/lib/dates";
+import { addDays, currentMonth, dayLong, monthLabel, nextMonthOf, mondayOf, slotLong, todayLocal, weekDays, weekFromParam, weekRangeLabel } from "@/lib/dates";
 
 export const metadata = { title: "Reservar clase" };
 
@@ -18,9 +18,11 @@ export default async function ReservarPage({ searchParams }: { searchParams: Pro
   if (monday < thisMonday) monday = thisMonday;
   if (monday > lastMonday) monday = lastMonday;
 
-  const [home, rows] = await Promise.all([
+  const months = [currentMonth(), nextMonthOf(currentMonth())];
+  const [home, rows, monthRows] = await Promise.all([
     getStudentHome(user.id),
     listSlots(user.id, monday, addDays(monday, 4)),
+    listMonthsForStudent(user.id, months),
   ]);
 
   const days: ReserveDay[] = weekDays(monday).map((date) => ({
@@ -67,6 +69,33 @@ export default async function ReservarPage({ searchParams }: { searchParams: Pro
         </nav>
       </header>
 
+      <p className="panel panel-pad text-sm" aria-label="Tus clases disponibles">
+        {months.map((m, i) => {
+          const r = monthRows.find((x) => x.month === m);
+          return (
+            <span key={m}>
+              {i > 0 && <span className="text-muted"> · </span>}
+              <span className="first-cap">{monthLabel(m)}</span>:{" "}
+              {r ? (
+                <strong className="tabular-nums">
+                  {r.balance} {r.balance === 1 ? "clase disponible" : "clases disponibles"}
+                </strong>
+              ) : (
+                <span className="text-muted">sin activar</span>
+              )}
+            </span>
+          );
+        })}
+        {monthRows.length < months.length && (
+          <>
+            {" "}
+            <Link href="/alumno" className="underline underline-offset-4">
+              Sube tu comprobante
+            </Link>{" "}
+            para activar un mes.
+          </>
+        )}
+      </p>
       {!anyFree && days.every((d) => d.slots.length === 0) && (
         <p className="panel panel-pad text-muted">No hay horarios libres esta semana. Prueba con la siguiente.</p>
       )}

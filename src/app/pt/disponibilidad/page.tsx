@@ -55,7 +55,7 @@ export default async function DisponibilidadPage() {
               {blocks.map((b) => (
                 <li key={b.id} className="panel flex flex-wrap items-center justify-between gap-3 p-3">
                   <p className="min-w-0">
-                    <span className="font-semibold capitalize">{dayLong(b.date)}</span>{" "}
+                    <span className="font-semibold first-cap">{dayLong(b.date)}</span>{" "}
                     <span className="text-muted">
                       {b.start === 0 && b.end === 24 ? "todo el día" : `${hourLabel(b.start)} a ${hourLabel(b.end)}`}
                       {b.reason ? ` · ${b.reason}` : ""}

@@ -14,6 +14,8 @@ const e2eEnv = {
   AUTH_DB_PASSWORD: "dev_auth_pass",
   BETTER_AUTH_SECRET: "e2e-secret-0123456789abcdef0123456789abcdef",
   APP_URL: `http://localhost:${PORT}`,
+  // Las pruebas crean muchos PT en pocos minutos; en producción el límite real es 5 cada 10 minutos.
+  REGISTER_LIMIT_MAX: "100",
   RESEND_API_KEY: "",
 };
 Object.assign(process.env, e2eEnv);

@@ -1,5 +1,15 @@
 import { InviteForm, InvitationActions, StudentLocationForm } from "@/components/forms";
-import { listLocations, listPendingInvitations, listStudents } from "@/lib/queries";
+import { StudentMonths } from "@/components/student-months";
+import {
+  listLedger,
+  listLocations,
+  listMonthsForPt,
+  listPendingInvitations,
+  listPendingProofs,
+  listPlans,
+  listStudents,
+} from "@/lib/queries";
+import { currentMonth, nextMonthOf } from "@/lib/dates";
 import { requirePt } from "@/lib/session";
 import { formatDate } from "@/lib/format";
 
@@ -7,10 +17,15 @@ export const metadata = { title: "Alumnos" };
 
 export default async function AlumnosPage() {
   const user = await requirePt();
-  const [students, invitations, locations] = await Promise.all([
+  const months = [currentMonth(), nextMonthOf(currentMonth())];
+  const [students, invitations, locations, plans, monthRows, proofs, ledger] = await Promise.all([
     listStudents(user.id),
     listPendingInvitations(user.id),
     listLocations(user.id),
+    listPlans(user.id),
+    listMonthsForPt(user.id, months),
+    listPendingProofs(user.id),
+    listLedger(user.id, months),
   ]);
   const active = locations.filter((l) => !l.archived).map((l) => ({ id: l.id, name: l.name }));
 
@@ -24,6 +39,15 @@ export default async function AlumnosPage() {
             : `${students.length} ${students.length === 1 ? "alumno" : "alumnos"} con cuenta.`}
         </p>
       </header>
+
+      {proofs.length > 0 && (
+        <p className="alert alert-ok" role="status">
+          {proofs.length === 1
+            ? "Tienes 1 comprobante de pago por revisar."
+            : `Tienes ${proofs.length} comprobantes de pago por revisar.`}{" "}
+          Están en la tarjeta de cada alumno, bajo el mes que pagó.
+        </p>
+      )}
 
       <section aria-labelledby="invitar" className="panel panel-pad">
         <h2 id="invitar" className="mb-4">
@@ -62,10 +86,8 @@ export default async function AlumnosPage() {
           <h2 id="lista">Tus alumnos</h2>
           <ul className="grid gap-3">
             {students.map((s) => (
-              <li
-                key={s.userId}
-                className="panel grid gap-3 p-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] md:items-center"
-              >
+              <li key={s.userId} className="panel grid gap-4 p-4">
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] md:items-center">
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{s.name}</p>
                   <p className="truncate text-sm text-muted">{s.email}</p>
@@ -81,6 +103,15 @@ export default async function AlumnosPage() {
                   </p>
                 </div>
                 <StudentLocationForm studentId={s.userId} current={s.locationId} locations={active} />
+                </div>
+                <StudentMonths
+                  studentId={s.userId}
+                  months={months}
+                  rows={monthRows.filter((r) => r.studentId === s.userId)}
+                  proofs={proofs.filter((p) => p.studentId === s.userId)}
+                  plans={plans}
+                  ledger={ledger.filter((l) => l.studentId === s.userId)}
+                />
               </li>
             ))}
           </ul>
