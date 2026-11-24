@@ -14,7 +14,7 @@ import {
   weekFromParam,
   weekRangeLabel,
 } from "@/lib/dates";
-import { blockSchema, parseHourRanges } from "@/lib/validation";
+import { blockSchema } from "@/lib/validation";
 
 describe("fechas locales", () => {
   it("todayLocal usa la fecha de Santiago, no la de UTC", () => {
@@ -68,33 +68,7 @@ describe("fechas locales", () => {
   });
 });
 
-describe("tramos y bloqueos", () => {
-  it("lee, ordena y valida tramos", () => {
-    expect(parseHourRanges(["13", "6", ""], ["22", "12", ""])).toEqual({
-      ranges: [
-        { start: 6, end: 12 },
-        { start: 13, end: 22 },
-      ],
-    });
-    expect(parseHourRanges(["", ""], ["", ""])).toEqual({ ranges: [] });
-    expect(parseHourRanges(["6", "12"], ["12", "22"])).toEqual({
-      ranges: [
-        { start: 6, end: 12 },
-        { start: 12, end: 22 },
-      ],
-    });
-  });
-
-  it("rechaza tramos incompletos, invertidos, fuera de rango o que se pisan", () => {
-    expect(parseHourRanges(["6"], [""])).toHaveProperty("error");
-    expect(parseHourRanges(["10"], ["10"])).toHaveProperty("error");
-    expect(parseHourRanges(["12"], ["8"])).toHaveProperty("error");
-    expect(parseHourRanges(["-1"], ["8"])).toHaveProperty("error");
-    expect(parseHourRanges(["6"], ["25"])).toHaveProperty("error");
-    expect(parseHourRanges(["6", "10"], ["12", "14"])).toEqual({ error: "Los tramos de un mismo día no pueden pisarse." });
-    expect(parseHourRanges(["6.5"], ["8"])).toHaveProperty("error");
-  });
-
+describe("bloqueos", () => {
   it("el bloqueo exige fecha y horas coherentes", () => {
     expect(blockSchema.safeParse({ date: "2026-11-26", from: "8", to: "10", reason: "" }).success).toBe(true);
     expect(blockSchema.safeParse({ date: "2026-11-26", from: "0", to: "24", reason: "Vacaciones" }).success).toBe(true);

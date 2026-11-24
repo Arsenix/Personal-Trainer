@@ -243,7 +243,8 @@ describe("créditos y reservas", () => {
     expect(await balance(st, m)).toBe(2);
     const d = await dayStr(9);
     const r = await q(ids.ptA, "select * from block_range($1, 0, 24, 'Vacaciones')", [d]);
-    expect(r.rowCount).toBe(2);
+    // Si un fin de semana hace caer a otro alumno en el mismo lunes, su clase también se cancela: al menos las dos de este.
+    expect(r.rowCount).toBeGreaterThanOrEqual(2);
     expect(await balance(st, m)).toBe(4);
   });
 

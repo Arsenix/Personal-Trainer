@@ -49,3 +49,8 @@ export function auditLabel(action: string): string {
 export function formatClp(n: number): string {
   return new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(n);
 }
+
+/** 62.5 → "62,5 kg"; 60 → "60 kg". */
+export function formatKg(kg: number): string {
+  return `${new Intl.NumberFormat("es-CL", { maximumFractionDigits: 2 }).format(kg)} kg`;
+}

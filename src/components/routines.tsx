@@ -5,16 +5,26 @@ import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { copyRoutine, saveRoutine, setRoutineActive } from "@/app/actions/pt";
 import { initialState } from "@/lib/action-state";
 import { FormMessage, SelectField, SubmitButton } from "./ui";
-import type { RoutineDay, RoutineExercise } from "@/lib/queries";
+import { ExerciseCombobox } from "./exercise-combobox";
+import type { RoutineDay } from "@/lib/queries";
 
-type Ex = RoutineExercise & { key: string };
+// Todo como texto mientras se edita; el servidor valida y convierte.
+type Ex = { key: string; name: string; sets: string; reps: string; weight: string; note: string };
 type Day = { key: string; title: string; exercises: Ex[] };
 
 let seq = 0;
 const key = () => `k${++seq}`;
-const blankEx = (): Ex => ({ key: key(), name: "", sets: 3, reps: "10", note: "" });
+const blankEx = (): Ex => ({ key: key(), name: "", sets: "3", reps: "10", weight: "", note: "" });
 const toState = (days: RoutineDay[]): Day[] =>
-  days.map((d) => ({ key: key(), title: d.title, exercises: d.exercises.map((e) => ({ ...e, key: key() })) }));
+  days.map((d) => ({ key: key(), title: d.title, exercises: d.exercises.map((e) => ({
+      key: key(),
+      name: e.name,
+      sets: String(e.sets),
+      reps: e.reps,
+      weight: e.weight === null ? "" : String(e.weight).replace(".", ","),
+      note: e.note,
+    })),
+  }));
 
 function move<T>(arr: T[], i: number, dir: -1 | 1): T[] {
   const j = i + dir;
@@ -46,7 +56,6 @@ export function RoutineEditor({
   // Controlados: React 19 vacía los campos no controlados después de cada envío, incluso con errores.
   const [name, setName] = useState(initial?.name ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
-  const listId = "ejercicios-sugeridos";
 
   const setDay = (i: number, patch: Partial<Day>) => setDays((ds) => ds.map((d, k) => (k === i ? { ...d, ...patch } : d)));
   const setEx = (i: number, j: number, patch: Partial<Ex>) =>
@@ -57,7 +66,7 @@ export function RoutineEditor({
   const payload = JSON.stringify(
     days.map((d) => ({
       title: d.title,
-      exercises: d.exercises.map(({ name, sets, reps, note }) => ({ name, sets, reps, note })),
+      exercises: d.exercises.map(({ name, sets, reps, weight, note }) => ({ name, sets, reps, weight, note })),
     })),
   );
 
@@ -66,17 +75,12 @@ export function RoutineEditor({
       {id && <input type="hidden" name="id" value={id} />}
       <input type="hidden" name="student" value={studentId} />
       <input type="hidden" name="days" value={payload} />
-      <datalist id={listId}>
-        {suggestions.map((n) => (
-          <option key={n} value={n} />
-        ))}
-      </datalist>
 
       <section className="panel panel-pad grid gap-4">
         <div className="field">
           <label htmlFor="r-name">Nombre de la rutina</label>
           <input id="r-name" name="name" className="input" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} required />
-          <p className="hint">Para {studentName}. Al guardarla pasa a ser su rutina activa.</p>
+          <p className="hint">Para {studentName}. Al guardarla pasa a ser su rutina activa. En cada ejercicio, el peso es opcional: vacío es peso corporal o sin carga.</p>
         </div>
         <div className="field">
           <label htmlFor="r-notes">Indicaciones generales (opcional)</label>
@@ -113,18 +117,32 @@ export function RoutineEditor({
           <ul className="grid gap-4">
             {d.exercises.map((e, j) => (
               <li key={e.key} className="grid gap-2 border-t border-line pt-4 first:border-0 first:pt-0">
-                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_5rem_6.5rem]">
-                  <div className="field">
-                    <label htmlFor={`n-${e.key}`}>Ejercicio {j + 1}</label>
-                    <input id={`n-${e.key}`} className="input" list={listId} maxLength={80} value={e.name} onChange={(ev) => setEx(i, j, { name: ev.target.value })} />
-                  </div>
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_4.5rem_6rem_6rem]">
+                  <ExerciseCombobox
+                    label={`Ejercicio ${j + 1}`}
+                    value={e.name}
+                    onChange={(name) => setEx(i, j, { name })}
+                    own={suggestions}
+                  />
                   <div className="field">
                     <label htmlFor={`s-${e.key}`}>Series</label>
-                    <input id={`s-${e.key}`} className="input" inputMode="numeric" value={String(e.sets)} onChange={(ev) => setEx(i, j, { sets: ev.target.value as unknown as number })} />
+                    <input id={`s-${e.key}`} className="input" inputMode="numeric" value={e.sets} onChange={(ev) => setEx(i, j, { sets: ev.target.value })} />
                   </div>
                   <div className="field">
                     <label htmlFor={`r-${e.key}`}>Repeticiones</label>
                     <input id={`r-${e.key}`} className="input" maxLength={20} value={e.reps} onChange={(ev) => setEx(i, j, { reps: ev.target.value })} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`w-${e.key}`}>Peso (kg)</label>
+                    <input
+                      id={`w-${e.key}`}
+                      className="input"
+                      inputMode="decimal"
+                      maxLength={7}
+                      placeholder="—"
+                      value={e.weight}
+                      onChange={(ev) => setEx(i, j, { weight: ev.target.value })}
+                    />
                   </div>
                 </div>
                 <div className="flex flex-wrap items-end gap-2">

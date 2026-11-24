@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+.env*
+.mail-outbox
+test-results
+playwright-report
+*.zip

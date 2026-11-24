@@ -1,0 +1,8 @@
+# Agregar al Caddyfile del stack y recargar (ver docs/DEPLOY.md). Caddy obtiene el certificado solo.
+pt.sanahora.app {
+    request_body {
+        max_size 7MB
+    }
+    header X-Robots-Tag "noindex, nofollow"
+    reverse_proxy pt-agenda:3000
+}

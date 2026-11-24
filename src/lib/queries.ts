@@ -449,7 +449,7 @@ export async function listRoutinesForPt(ptId: string): Promise<RoutineListRow[]>
   });
 }
 
-export type RoutineExercise = { name: string; sets: number; reps: string; note: string };
+export type RoutineExercise = { name: string; sets: number; reps: string; weight: number | null; note: string };
 export type RoutineDay = { title: string; exercises: RoutineExercise[] };
 export type RoutineFull = {
   id: string;
@@ -472,7 +472,7 @@ async function loadRoutine(c: import("pg").PoolClient, where: string, params: un
   const r = rows[0];
   if (!r) return null;
   const { rows: items } = await c.query(
-    `select d.position as dp, d.title, e.position as ep, e.name, e.sets, e.reps, coalesce(e.note, '') as note
+    `select d.position as dp, d.title, e.position as ep, e.name, e.sets, e.reps, e.weight_kg::float8 as weight, coalesce(e.note, '') as note
        from routine_days d left join routine_exercises e on e.day_id = d.id
       where d.routine_id = $1 order by d.position, e.position`,
     [r.id],
@@ -480,7 +480,7 @@ async function loadRoutine(c: import("pg").PoolClient, where: string, params: un
   const days: RoutineDay[] = [];
   for (const it of items) {
     if (!days[it.dp - 1]) days[it.dp - 1] = { title: it.title, exercises: [] };
-    if (it.name) days[it.dp - 1].exercises.push({ name: it.name, sets: it.sets, reps: it.reps, note: it.note });
+    if (it.name) days[it.dp - 1].exercises.push({ name: it.name, sets: it.sets, reps: it.reps, weight: it.weight, note: it.note });
   }
   return { ...r, days: days.filter(Boolean) };
 }

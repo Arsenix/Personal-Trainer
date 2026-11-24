@@ -126,30 +126,16 @@ export function fieldErrors(error: z.ZodError): FieldErrors {
 // ---------------------------------------------------------------------------
 // Agenda (iteración 2)
 // ---------------------------------------------------------------------------
-export type HourRange = { start: number; end: number };
-
-/** Lee los pares from/to de un formulario y devuelve tramos ordenados, o un mensaje de error. */
-export function parseHourRanges(from: string[], to: string[]): { ranges: HourRange[] } | { error: string } {
-  const ranges: HourRange[] = [];
-  const n = Math.max(from.length, to.length);
-  for (let i = 0; i < n; i++) {
-    const f = (from[i] ?? "").trim();
-    const t = (to[i] ?? "").trim();
-    if (f === "" && t === "") continue;
-    if (f === "" || t === "") return { error: "Cada tramo necesita hora de inicio y de término." };
-    if (!/^\d{1,2}$/.test(f) || !/^\d{1,2}$/.test(t)) return { error: "Hora no válida." };
-    const start = Number(f);
-    const end = Number(t);
-    if (start < 0 || start > 23 || end < 1 || end > 24) return { error: "Hora no válida." };
-    if (end <= start) return { error: "El término de cada tramo debe ser después del inicio." };
-    ranges.push({ start, end });
-  }
-  ranges.sort((a, b) => a.start - b.start);
-  for (let i = 1; i < ranges.length; i++) {
-    if (ranges[i].start < ranges[i - 1].end) return { error: "Los tramos de un mismo día no pueden pisarse." };
-  }
-  return { ranges };
-}
+/** Horario semanal enviado por el editor de bloques (JSON). La coherencia fina la revisa expandBlocks. */
+export const scheduleInputSchema = z
+  .array(
+    z.object({
+      days: z.array(z.number().int().min(1).max(7)).max(7),
+      start: z.number().int().min(0).max(23),
+      end: z.number().int().min(1).max(24),
+    }),
+  )
+  .max(20);
 
 export const blockSchema = z
   .object({
@@ -202,6 +188,19 @@ export const exerciseSchema = z.object({
   name: text(1, 80, "Cada ejercicio necesita un nombre"),
   sets: z.coerce.number().int("Series: un número entero").min(1, "Series: entre 1 y 20").max(20, "Series: entre 1 y 20"),
   reps: text(1, 20, "Indica las repeticiones (ej. 10 o 8-10)"),
+  // Kilos, opcional: vacío = peso corporal o sin carga. Acepta coma o punto y hasta dos decimales.
+  weight: z
+    .union([z.string(), z.number(), z.null()])
+    .optional()
+    .transform((v) => (v === undefined || v === null || String(v).trim() === "" ? null : Number(String(v).trim().replace(",", "."))))
+    .pipe(
+      z
+        .number("Peso: un número en kilos (ej. 62,5)")
+        .min(0, "Peso: no puede ser negativo")
+        .max(999.99, "Peso: máximo 999,99 kg")
+        .refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-6, "Peso: hasta 2 decimales")
+        .nullable(),
+    ),
   note: z.string().trim().max(200, "La nota admite hasta 200 caracteres").default(""),
 });
 

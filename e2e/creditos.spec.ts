@@ -23,7 +23,7 @@ let st: Awaited<ReturnType<typeof newPage>>;
 const monthCard = () => st.page.getByRole("article", { name: new RegExp(monthLabel(month), "i") });
 
 async function reserve(hour: number) {
-  await st.page.goto(`/alumno/reservar?semana=${nextMonday}`);
+  await st.page.goto(`/alumno/reservar?dia=${wednesday}`);
   await st.page.getByRole("button", { name: new RegExp(`Elegir miércoles .*, ${String(hour).padStart(2, "0")}:00`) }).click();
   await st.page.getByRole("button", { name: "Confirmar reserva" }).click();
 }

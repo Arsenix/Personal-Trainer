@@ -1,0 +1,16 @@
+# Servicio de PT Agenda. Se une a la red del stack existente (stack_default) para hablar con
+# stack-postgres-1 y con Caddy. No modifica ningún contenedor existente.
+services:
+  pt-agenda:
+    build: .
+    image: pt-agenda:local
+    container_name: pt-agenda
+    env_file: .env.docker
+    restart: unless-stopped
+    mem_limit: 700m
+    networks: [stack]
+
+networks:
+  stack:
+    name: stack_default
+    external: true

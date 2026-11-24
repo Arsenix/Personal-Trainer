@@ -116,6 +116,31 @@ export function currentMonth(now: Date = new Date()): string {
   return `${todayLocal(now).slice(0, 7)}-01`;
 }
 
+/** Primer día del mes de una fecha: "2026-11-26" → "2026-11-01". */
+export function monthStartOf(date: string): string {
+  return `${date.slice(0, 7)}-01`;
+}
+
+export function prevMonthOf(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return m === 1 ? `${y - 1}-12-01` : `${y}-${pad(m - 1)}-01`;
+}
+
+/** Último día del mes ("2026-11-01" → "2026-11-30"). */
+export function monthEndOf(month: string): string {
+  return addDays(nextMonthOf(month), -1);
+}
+
+/** Semanas (lunes a domingo) que cubren el mes. Incluye los días vecinos que completan la primera y la última semana. */
+export function monthWeeks(month: string): string[][] {
+  const weeks: string[][] = [];
+  const end = monthEndOf(month);
+  for (let monday = mondayOf(month); monday <= end; monday = addDays(monday, 7)) {
+    weeks.push([0, 1, 2, 3, 4, 5, 6].map((i) => addDays(monday, i)));
+  }
+  return weeks;
+}
+
 export function nextMonthOf(month: string): string {
   const [y, m] = month.split("-").map(Number);
   return m === 12 ? `${y + 1}-01-01` : `${y}-${pad(m + 1)}-01`;

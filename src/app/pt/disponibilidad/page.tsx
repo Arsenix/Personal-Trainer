@@ -1,17 +1,10 @@
-import { BlockForm, DayRulesForm, RemoveBlockForm, ResetRulesForm } from "@/components/agenda";
+import { BlockForm, RemoveBlockForm, ScheduleEditor } from "@/components/agenda";
 import { listBlocks, listRules } from "@/lib/queries";
 import { requirePt } from "@/lib/session";
 import { dayLong, hourLabel } from "@/lib/dates";
+import { groupRulesIntoBlocks } from "@/lib/schedule";
 
 export const metadata = { title: "Disponibilidad" };
-
-const DAYS = [
-  [1, "Lunes"],
-  [2, "Martes"],
-  [3, "Miércoles"],
-  [4, "Jueves"],
-  [5, "Viernes"],
-] as const;
 
 export default async function DisponibilidadPage() {
   const user = await requirePt();
@@ -22,24 +15,20 @@ export default async function DisponibilidadPage() {
       <header>
         <h1>Disponibilidad</h1>
         <p className="mt-2 max-w-xl text-muted">
-          Cada hora dentro de tus tramos es una clase de 1 hora que tus alumnos pueden reservar. Las clases que ya
+          Cada hora dentro de tu horario es una clase de 1 hora que tus alumnos pueden reservar. Las clases que ya
           están reservadas no se cancelan solas si cambias el horario: cancélalas desde la agenda si hace falta.
         </p>
       </header>
 
       <section aria-labelledby="semanal" className="grid gap-4">
         <h2 id="semanal">Horario semanal</h2>
-        <div className="grid gap-4 md:grid-cols-2">
-          {DAYS.map(([weekday, label]) => (
-            <DayRulesForm
-              key={weekday}
-              weekday={weekday}
-              label={label}
-              ranges={rules.filter((r) => r.weekday === weekday).map((r) => ({ start: r.start, end: r.end }))}
-            />
-          ))}
-        </div>
-        <ResetRulesForm />
+        <p className="max-w-xl text-muted">
+          Cada bloque es «estos días, de tal hora a tal hora». Si atiendes el mismo horario varios días, márcalos en
+          un solo bloque. Para una pausa de almuerzo, usa dos bloques.
+        </p>
+        <ScheduleEditor
+          initial={groupRulesIntoBlocks(rules.map((r) => ({ weekday: r.weekday, start: r.start, end: r.end })))}
+        />
       </section>
 
       <section id="bloqueos" aria-labelledby="bloquear" className="grid gap-4">

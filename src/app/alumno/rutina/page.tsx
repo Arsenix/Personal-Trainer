@@ -1,6 +1,6 @@
 import { getActiveRoutine } from "@/lib/queries";
 import { requireStudent } from "@/lib/session";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatKg } from "@/lib/format";
 
 export const metadata = { title: "Mi rutina" };
 
@@ -37,6 +37,12 @@ export default async function RutinaPage() {
                 </div>
                 <p className="tabular-nums">
                   <span className="font-semibold">{e.sets}</span> × <span className="font-semibold">{e.reps}</span>
+                  {e.weight !== null && (
+                    <>
+                      <span className="text-muted"> · </span>
+                      <span className="font-semibold">{formatKg(e.weight)}</span>
+                    </>
+                  )}
                 </p>
               </li>
             ))}

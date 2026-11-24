@@ -13,14 +13,15 @@ import {
   fieldErrors,
   inviteSchema,
   locationSchema,
-  parseHourRanges,
   planSchema,
   profileSchema,
   routineSchema,
+  scheduleInputSchema,
 } from "@/lib/validation";
 import { notifyBooking } from "@/lib/agenda-mail";
 import { notifyMonthActivated, notifyProofRejected } from "@/lib/credit-mail";
 import { todayLocal } from "@/lib/dates";
+import { expandBlocks, weeklyHours } from "@/lib/schedule";
 import { formValues, str, type ActionState } from "@/lib/action-state";
 import { allow } from "@/lib/rate-limit";
 
@@ -296,50 +297,42 @@ function refreshAgenda() {
   revalidatePath("/alumno", "layout");
 }
 
-export async function saveDayRules(_prev: ActionState, fd: FormData): Promise<ActionState> {
+/** Guarda el horario semanal completo (reemplaza todas las reglas) a partir de los bloques del editor. */
+export async function saveWeekSchedule(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const user = await requirePt();
-  const weekday = Number(str(fd, "weekday"));
-  if (!Number.isInteger(weekday) || weekday < 1 || weekday > 5) return { error: "Día no válido." };
-  const parsed = parseHourRanges(
-    fd.getAll("from").map(String),
-    fd.getAll("to").map(String),
-  );
-  if ("error" in parsed) return { error: parsed.error };
-  await withUser(user.id, async (c) => {
-    await c.query("delete from availability_rules where weekday = $1", [weekday]);
-    for (const r of parsed.ranges) {
-      await c.query(
-        "insert into availability_rules (pt_id, weekday, start_hour, end_hour) values ($1, $2, $3, $4)",
-        [user.id, weekday, r.start, r.end],
-      );
-    }
-    await audit(c, user.id, "availability.updated", "availability_rules", String(weekday), {
-      weekday,
-      ranges: parsed.ranges.length,
-    });
-  });
-  refreshAgenda();
-  return {
-    ok: true,
-    message: parsed.ranges.length === 0 ? "Ese día quedó sin atención." : "Horario guardado.",
-  };
-}
+  let raw: unknown;
+  try {
+    raw = JSON.parse(str(fd, "blocks") || "[]");
+  } catch {
+    return { error: "No pudimos leer el horario. Recarga la página e inténtalo de nuevo." };
+  }
+  const input = scheduleInputSchema.safeParse(raw);
+  if (!input.success) return { error: "El horario tiene datos no válidos. Revisa los días y las horas." };
+  const expanded = expandBlocks(input.data);
+  if ("error" in expanded) return { error: expanded.error };
 
-export async function resetDefaultRules(): Promise<ActionState> {
-  const user = await requirePt();
   await withUser(user.id, async (c) => {
     await c.query("delete from availability_rules");
-    await c.query(
-      `insert into availability_rules (pt_id, weekday, start_hour, end_hour)
-       select $1, d, 6, 22 from generate_series(1, 5) as d`,
-      [user.id],
-    );
+    for (const r of expanded.rules) {
+      await c.query(
+        "insert into availability_rules (pt_id, weekday, start_hour, end_hour) values ($1, $2, $3, $4)",
+        [user.id, r.weekday, r.start, r.end],
+      );
+    }
     await audit(c, user.id, "availability.updated", "availability_rules", undefined, {
-      reset: true,
+      blocks: input.data.length,
+      hoursPerWeek: weeklyHours(expanded.rules),
     });
   });
   refreshAgenda();
-  return { ok: true, message: "Horario restablecido: lunes a viernes, de 06:00 a 22:00." };
+  const hours = weeklyHours(expanded.rules);
+  return {
+    ok: true,
+    message:
+      hours === 0
+        ? "Horario guardado: no tienes horas abiertas."
+        : `Horario guardado: ${hours} ${hours === 1 ? "clase" : "clases"} por semana.`,
+  };
 }
 
 /** Bloquea horas de una fecha. Si caen clases reservadas, pide confirmación antes de cancelarlas. */

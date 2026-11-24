@@ -31,10 +31,13 @@ export async function migrate(opts?: {
   await client.connect();
   try {
     // Los roles son del cluster: se crean una vez y luego solo se actualiza la clave.
-    for (const [role, password] of [
+    // Con SKIP_ROLE_SETUP=1 (Postgres compartido, donde el dueño no puede crear roles) los roles
+    // ya vienen creados por un superusuario y aquí no se tocan.
+    const roleSetup = process.env.SKIP_ROLE_SETUP === "1" ? [] : ([
       ["ptagenda_app", appPassword],
       ["ptagenda_auth", authPassword],
-    ] as const) {
+    ] as const);
+    for (const [role, password] of roleSetup) {
       const exists = await client.query("select 1 from pg_roles where rolname = $1", [role]);
       const pw = await client.query("select quote_literal($1) as q", [password]);
       const sql = exists.rowCount

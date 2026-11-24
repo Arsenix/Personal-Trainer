@@ -40,17 +40,29 @@ test("el PT arma una rutina con dos días; los errores se explican y nada se pie
   await p.getByLabel("Ejercicio 1", { exact: true }).fill("Sentadilla");
   await p.getByLabel("Series").first().fill("4");
   await p.getByLabel("Repeticiones").first().fill("8-10");
+  await p.getByLabel("Peso (kg)").first().fill("60");
   await p.getByRole("button", { name: "Agregar ejercicio" }).click();
-  await p.getByLabel("Ejercicio 2", { exact: true }).fill("Puente de glúteos");
+  // Autocompletar: al escribir salen sugerencias del catálogo y se elige con el mouse.
+  await p.getByLabel("Ejercicio 2", { exact: true }).fill("hip thr");
+  await expect(p.getByRole("option")).toHaveCount(1);
+  await p.getByRole("option", { name: /Hip thrust/ }).click();
+  await expect(p.getByLabel("Ejercicio 2", { exact: true })).toHaveValue("Hip thrust");
+  await p.getByLabel("Peso (kg)").nth(1).fill("62,5");
   await p.getByLabel("Nota (opcional)").nth(1).fill("Pausa arriba");
 
   await p.getByRole("button", { name: "Agregar día" }).click();
   await p.getByLabel("Título del día 2").fill("Empuje");
-  await p.getByRole("region", { name: "Día 2" }).getByLabel("Ejercicio 1", { exact: true }).fill("Press banca");
+  const dia2 = p.getByRole("region", { name: "Día 2" });
+  await dia2.getByLabel("Ejercicio 1", { exact: true }).fill("press ban");
+  // Con la lista abierta, Enter no envía la rutina: elige la opción marcada con las flechas.
+  await p.keyboard.press("ArrowDown");
+  await p.keyboard.press("Enter");
+  await expect(dia2.getByLabel("Ejercicio 1", { exact: true })).toHaveValue("Press banca");
+  await expect(p.getByRole("heading", { level: 1, name: "Nueva rutina" })).toBeVisible();
 
   // Reordenar: sube el ejercicio 2 del día 1 y vuelve a bajarlo (no debe romper nada).
   await p.getByRole("button", { name: "Subir el ejercicio 2 del día 1" }).click();
-  await expect(p.getByLabel("Ejercicio 1", { exact: true }).first()).toHaveValue("Puente de glúteos");
+  await expect(p.getByLabel("Ejercicio 1", { exact: true }).first()).toHaveValue("Hip thrust");
   await p.getByRole("button", { name: "Bajar el ejercicio 1 del día 1" }).click();
   await expect(p.getByLabel("Ejercicio 1", { exact: true }).first()).toHaveValue("Sentadilla");
 
@@ -68,7 +80,10 @@ test("el alumno ve su rutina completa y en orden", async () => {
   await expect(s.getByRole("heading", { name: "Piernas" })).toBeVisible();
   await expect(s.getByText("Sentadilla")).toBeVisible();
   await expect(s.getByText("Pausa arriba")).toBeVisible();
-  await expect(s.getByRole("listitem").filter({ hasText: "Sentadilla" })).toContainText("4 × 8-10");
+  await expect(s.getByRole("listitem").filter({ hasText: "Sentadilla" })).toContainText("4 × 8-10 · 60 kg");
+  await expect(s.getByRole("listitem").filter({ hasText: "Hip thrust" })).toContainText("62,5 kg");
+  // Sin peso cargado no se muestra nada (peso corporal).
+  await expect(s.getByRole("listitem").filter({ hasText: "Press banca" })).not.toContainText("kg");
   await expect(s.getByRole("heading", { name: "Empuje" })).toBeVisible();
   // El otro alumno no ve nada de esto.
   await s2.page.goto("/alumno/rutina");

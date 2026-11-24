@@ -1,22 +1,21 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { Ban, CalendarCheck, X } from "lucide-react";
+import { useActionState, useId, useRef, useState } from "react";
+import { Ban, Plus, X } from "lucide-react";
 import {
   blockSlot,
   cancelBookingAsPt,
   createBlock,
   removeBlock,
-  resetDefaultRules,
-  saveDayRules,
+  saveWeekSchedule,
 } from "@/app/actions/pt";
-import { bookClass, cancelBookingAsStudent } from "@/app/actions/student";
+import { cancelBookingAsStudent } from "@/app/actions/student";
 import { initialState } from "@/lib/action-state";
 import { hourLabel } from "@/lib/dates";
-import { Field, FormMessage, SelectField, SubmitButton } from "./ui";
+import { expandBlocks, weeklyHours, WEEKDAYS, type ScheduleBlock } from "@/lib/schedule";
+import { Field, FormMessage, SubmitButton } from "./ui";
 
 const FROM_HOURS = Array.from({ length: 24 }, (_, i) => i);
-const TO_HOURS = Array.from({ length: 24 }, (_, i) => i + 1);
 
 // ---------------------------------------------------------------------------
 // PT: agenda semanal
@@ -71,86 +70,191 @@ export function PtCancelForm({ id, who }: { id: string; who: string }) {
 // ---------------------------------------------------------------------------
 // PT: disponibilidad
 // ---------------------------------------------------------------------------
-export function DayRulesForm({
-  weekday,
+type EditorBlock = ScheduleBlock & { key: number };
+
+const WEEKDAY_PRESET: ScheduleBlock[] = [{ days: [1, 2, 3, 4, 5], start: 6, end: 22 }];
+
+function HourSelects({
+  idBase,
   label,
-  ranges,
+  start,
+  end,
+  onChange,
 }: {
-  weekday: number;
+  idBase: string;
   label: string;
-  ranges: { start: number; end: number }[];
+  start: number;
+  end: number;
+  onChange: (start: number, end: number) => void;
 }) {
-  const [state, action] = useActionState(saveDayRules, initialState);
-  const rows = [...ranges, { start: -1, end: -1 }]; // una fila vacía para agregar un tramo
+  // «Hasta» solo ofrece horas posteriores a «Desde», así no se puede armar un tramo al revés.
+  const toHours = Array.from({ length: 24 - start }, (_, i) => start + 1 + i);
   return (
-    <form action={action} className="panel grid gap-3 p-4">
-      <input type="hidden" name="weekday" value={weekday} />
-      <div className="flex items-baseline justify-between gap-3">
-        <h3>{label}</h3>
-        <span className="text-sm text-muted">
-          {ranges.length === 0 ? "Sin atención" : `${ranges.length} ${ranges.length === 1 ? "tramo" : "tramos"}`}
-        </span>
+    <div className="flex flex-wrap items-end gap-3">
+      <div className="field">
+        <label htmlFor={`${idBase}-from`}>Desde</label>
+        <select
+          id={`${idBase}-from`}
+          aria-label={`Desde (${label})`}
+          value={start}
+          onChange={(e) => {
+            const nextStart = Number(e.target.value);
+            onChange(nextStart, end <= nextStart ? nextStart + 1 : end);
+          }}
+          className="input min-h-10 w-auto py-1 text-sm"
+        >
+          {FROM_HOURS.map((h) => (
+            <option key={h} value={h}>
+              {hourLabel(h)}
+            </option>
+          ))}
+        </select>
       </div>
-      <ul className="grid gap-2">
-        {rows.map((r, i) => (
-          <li key={`${weekday}-${i}-${r.start}-${r.end}`} className="flex flex-wrap items-center gap-2">
-            <span className="w-14 text-sm text-muted">{r.start < 0 ? "Agregar" : `Tramo ${i + 1}`}</span>
-            <label className="sr-only" htmlFor={`from-${weekday}-${i}`}>
-              Desde ({label}, fila {i + 1})
-            </label>
-            <select
-              id={`from-${weekday}-${i}`}
-              name="from"
-              defaultValue={r.start < 0 ? "" : String(r.start)}
-              className="input min-h-10 w-auto py-1 text-sm"
-            >
-              <option value="">—</option>
-              {FROM_HOURS.map((h) => (
-                <option key={h} value={h}>
-                  {hourLabel(h)}
-                </option>
-              ))}
-            </select>
-            <span aria-hidden className="text-muted">
-              a
-            </span>
-            <label className="sr-only" htmlFor={`to-${weekday}-${i}`}>
-              Hasta ({label}, fila {i + 1})
-            </label>
-            <select
-              id={`to-${weekday}-${i}`}
-              name="to"
-              defaultValue={r.end < 0 ? "" : String(r.end)}
-              className="input min-h-10 w-auto py-1 text-sm"
-            >
-              <option value="">—</option>
-              {TO_HOURS.map((h) => (
-                <option key={h} value={h}>
-                  {hourLabel(h)}
-                </option>
-              ))}
-            </select>
-          </li>
-        ))}
-      </ul>
-      <p className="text-xs text-muted">Para quitar un tramo, deja su hora en «—». Cada hora entre el inicio y el término es una clase.</p>
-      <FormMessage state={state} />
-      <div>
-        <SubmitButton className="btn btn-primary btn-sm">Guardar {label.toLowerCase()}</SubmitButton>
+      <div className="field">
+        <label htmlFor={`${idBase}-to`}>Hasta</label>
+        <select
+          id={`${idBase}-to`}
+          aria-label={`Hasta (${label})`}
+          value={end}
+          onChange={(e) => onChange(start, Number(e.target.value))}
+          className="input min-h-10 w-auto py-1 text-sm"
+        >
+          {toHours.map((h) => (
+            <option key={h} value={h}>
+              {hourLabel(h)}
+            </option>
+          ))}
+        </select>
       </div>
-    </form>
+    </div>
   );
 }
 
-export function ResetRulesForm() {
-  const [state, action] = useActionState(resetDefaultRules, initialState);
+/** Horario semanal: bloques de «estos días, de tal hora a tal hora». Se guarda todo de una vez. */
+export function ScheduleEditor({ initial }: { initial: ScheduleBlock[] }) {
+  const [state, action] = useActionState(saveWeekSchedule, initialState);
+  const uid = useId().replace(/:/g, "");
+  const nextKey = useRef(initial.length);
+  const [blocks, setBlocks] = useState<EditorBlock[]>(() => initial.map((b, i) => ({ ...b, key: i })));
+
+  const patch = (key: number, change: Partial<ScheduleBlock>) =>
+    setBlocks((all) => all.map((b) => (b.key === key ? { ...b, ...change } : b)));
+  const toggleDay = (key: number, day: number) =>
+    setBlocks((all) =>
+      all.map((b) =>
+        b.key === key
+          ? { ...b, days: b.days.includes(day) ? b.days.filter((d) => d !== day) : [...b.days, day].sort((x, y) => x - y) }
+          : b,
+      ),
+    );
+  const addBlock = () =>
+    setBlocks((all) => [...all, { key: nextKey.current++, days: [], start: all.length === 0 ? 6 : 16, end: all.length === 0 ? 22 : 21 }]);
+  const usePreset = () => {
+    setBlocks(WEEKDAY_PRESET.map((b) => ({ ...b, key: nextKey.current++ })));
+  };
+
+  const plain: ScheduleBlock[] = blocks.map(({ days, start, end }) => ({ days, start, end }));
+  const expanded = expandBlocks(plain);
+  const rules = "rules" in expanded ? expanded.rules : [];
+  const hours = weeklyHours(rules);
+
   return (
-    <form action={action} className="grid gap-2">
+    <form action={action} className="grid gap-5">
+      <input type="hidden" name="blocks" value={JSON.stringify(plain)} />
+
+      {blocks.length === 0 && (
+        <p className="panel panel-pad text-muted">
+          Todavía no tienes horas abiertas. Agrega un bloque o usa «Lunes a viernes, 06:00 a 22:00».
+        </p>
+      )}
+
+      <ul className="grid gap-3">
+        {blocks.map((b, i) => (
+          <li key={b.key} className="panel grid gap-3 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3>Bloque {i + 1}</h3>
+              <button
+                type="button"
+                className="btn btn-quiet btn-sm"
+                onClick={() => setBlocks((all) => all.filter((x) => x.key !== b.key))}
+              >
+                <X size={14} aria-hidden /> Quitar bloque {i + 1}
+              </button>
+            </div>
+            <fieldset className="grid gap-2">
+              <legend className="mb-1 text-sm text-muted">Días</legend>
+              <div className="flex flex-wrap gap-2">
+                {WEEKDAYS.map((d) => {
+                  const on = b.days.includes(d.n);
+                  return (
+                    <button
+                      key={d.n}
+                      type="button"
+                      aria-pressed={on}
+                      aria-label={`${d.long}, bloque ${i + 1}`}
+                      onClick={() => toggleDay(b.key, d.n)}
+                      className={`btn btn-sm ${on ? "btn-primary" : "btn-quiet"}`}
+                    >
+                      {d.short}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+            <HourSelects
+              idBase={`${uid}-${b.key}`}
+              label={`bloque ${i + 1}`}
+              start={b.start}
+              end={b.end}
+              onChange={(start, end) => patch(b.key, { start, end })}
+            />
+          </li>
+        ))}
+      </ul>
+
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn btn-quiet btn-sm" onClick={addBlock}>
+          <Plus size={14} aria-hidden /> Agregar bloque
+        </button>
+        <button type="button" className="btn btn-quiet btn-sm" onClick={usePreset}>
+          Lunes a viernes, 06:00 a 22:00
+        </button>
+      </div>
+
+      <section aria-label="Cómo queda tu semana" className="panel grid gap-2 p-4">
+        <h3>Así queda tu semana</h3>
+        {"error" in expanded ? (
+          <p className="field-error" role="alert">
+            {expanded.error}
+          </p>
+        ) : (
+          <>
+            <ul className="grid gap-1 text-sm">
+              {WEEKDAYS.map((d) => {
+                const day = rules.filter((r) => r.weekday === d.n);
+                return (
+                  <li key={d.n} className="flex gap-3">
+                    <span className="w-10 font-semibold">{d.short}</span>
+                    <span className={day.length === 0 ? "text-muted" : ""}>
+                      {day.length === 0
+                        ? "Sin atención"
+                        : day.map((r) => `${hourLabel(r.start)} a ${hourLabel(r.end)}`).join(" y ")}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="text-sm text-muted">
+              {hours} {hours === 1 ? "clase" : "clases"} por semana. Cada hora es una clase de 1 hora que tus alumnos
+              pueden reservar.
+            </p>
+          </>
+        )}
+      </section>
+
       <FormMessage state={state} />
       <div>
-        <SubmitButton className="btn btn-quiet btn-sm" pendingText="Restableciendo…">
-          Restablecer lunes a viernes, 06:00 a 22:00
-        </SubmitButton>
+        <SubmitButton pendingText="Guardando…">Guardar horario</SubmitButton>
       </div>
     </form>
   );
@@ -158,26 +262,47 @@ export function ResetRulesForm() {
 
 export function BlockForm() {
   const [state, action] = useActionState(createBlock, initialState);
+  const uid = useId().replace(/:/g, "");
+  const [from, setFrom] = useState(0);
+  const [to, setTo] = useState(24);
+  const toHours = Array.from({ length: 24 - from }, (_, i) => from + 1 + i);
   return (
     <form action={action} className="grid gap-4" noValidate>
       <FormMessage state={state} />
       <div className="grid gap-4 sm:grid-cols-3">
         <Field name="date" label="Fecha" type="date" state={state} required />
-        <SelectField name="from" label="Desde" state={state} defaultValue="0">
-          {FROM_HOURS.map((h) => (
-            <option key={h} value={h}>
-              {hourLabel(h)}
-            </option>
-          ))}
-        </SelectField>
-        <SelectField name="to" label="Hasta" state={state} defaultValue="24">
-          {TO_HOURS.map((h) => (
-            <option key={h} value={h}>
-              {hourLabel(h)}
-            </option>
-          ))}
-        </SelectField>
+        <div className="field">
+          <label htmlFor={`${uid}-from`}>Desde</label>
+          <select
+            id={`${uid}-from`}
+            name="from"
+            className="input"
+            value={from}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              setFrom(next);
+              if (to <= next) setTo(next + 1);
+            }}
+          >
+            {FROM_HOURS.map((h) => (
+              <option key={h} value={h}>
+                {hourLabel(h)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor={`${uid}-to`}>Hasta</label>
+          <select id={`${uid}-to`} name="to" className="input" value={to} onChange={(e) => setTo(Number(e.target.value))}>
+            {toHours.map((h) => (
+              <option key={h} value={h}>
+                {hourLabel(h)}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
+      <p className="hint -mt-2">De 00:00 a 24:00 se bloquea el día completo.</p>
       <Field name="reason" label="Motivo (opcional)" state={state} hint="Solo lo ves tú." />
       {state.conflicts ? (
         <div className="alert alert-error grid gap-3" role="alert">
@@ -219,77 +344,8 @@ export function RemoveBlockForm({ id }: { id: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Alumno: reservar y cancelar
+// Alumno: cancelar (la reserva vive en reserve-calendar.tsx)
 // ---------------------------------------------------------------------------
-export type ReserveSlot = { start: string; hour: number; state: "free" | "mine"; long: string };
-export type ReserveDay = { date: string; label: string; slots: ReserveSlot[] };
-
-export function ReserveWeek({ days }: { days: ReserveDay[] }) {
-  const [state, action] = useActionState(bookClass, initialState);
-  const [selected, setSelected] = useState<string | null>(null);
-  // La selección solo vale mientras ese horario siga libre (tras reservar pasa a "Tu clase").
-  const current = days.flatMap((d) => d.slots).find((s) => s.start === selected && s.state === "free") ?? null;
-
-  return (
-    <div className="grid gap-6">
-      <FormMessage state={state} />
-      {days.map((d) => (
-        <section key={d.date} aria-labelledby={`dia-${d.date}`} className="grid gap-3">
-          <h2 id={`dia-${d.date}`} className="text-lg first-cap">
-            {d.label}
-          </h2>
-          {d.slots.length === 0 ? (
-            <p className="text-sm text-muted">Sin horarios libres este día.</p>
-          ) : (
-            <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-              {d.slots.map((s) => (
-                <li key={s.start}>
-                  {s.state === "mine" ? (
-                    <span className="tag tag-volt flex min-h-11 w-full items-center justify-center rounded-[var(--radius-field)]">
-                      <CalendarCheck size={14} aria-hidden /> Tu clase {hourLabel(s.hour)}
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      aria-pressed={current?.start === s.start}
-                      onClick={() => setSelected(s.start)}
-                      className={`btn w-full ${current?.start === s.start ? "btn-primary" : "btn-quiet"}`}
-                      aria-label={`Elegir ${s.long}`}
-                    >
-                      {hourLabel(s.hour)}
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ))}
-
-      {current && (
-        <form
-          action={action}
-          className="on-dark sticky bottom-3 z-20 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-panel)] bg-ink p-4 text-paper shadow-xl"
-        >
-          <input type="hidden" name="start" value={current.start} />
-          <p className="min-w-0 text-sm">
-            <span className="block text-[#9aa7b0]">Vas a reservar</span>
-            <span className="font-semibold first-cap">{current.long}</span>
-          </p>
-          <div className="flex gap-2">
-            <button type="button" className="btn btn-quiet !border-[#3a4650] !text-paper" onClick={() => setSelected(null)}>
-              Elegir otro
-            </button>
-            <SubmitButton className="btn btn-volt" pendingText="Reservando…">
-              Confirmar reserva
-            </SubmitButton>
-          </div>
-        </form>
-      )}
-    </div>
-  );
-}
-
 export function StudentCancelForm({ id, canCancel }: { id: string; canCancel: boolean }) {
   const [state, action] = useActionState(cancelBookingAsStudent, initialState);
   if (!canCancel) {

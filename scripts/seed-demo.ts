@@ -136,9 +136,9 @@ async function main() {
     {
       title: "Día A · Piernas y empuje",
       exercises: [
-        { name: "Sentadilla con barra", sets: 4, reps: "8-10", note: "Baja controlado, pausa de un segundo" },
-        { name: "Press banca", sets: 4, reps: "8", note: "" },
-        { name: "Peso muerto rumano", sets: 3, reps: "10", note: "Espalda neutra" },
+        { name: "Sentadilla libre", sets: 4, reps: "8-10", weight: 60, note: "Baja controlado, pausa de un segundo" },
+        { name: "Press banca", sets: 4, reps: "8", weight: 47.5, note: "" },
+        { name: "Peso muerto rumano", sets: 3, reps: "10", weight: 50, note: "Espalda neutra" },
         { name: "Plancha", sets: 3, reps: "40 s", note: "" },
       ],
     },
@@ -146,8 +146,8 @@ async function main() {
       title: "Día B · Espalda y brazos",
       exercises: [
         { name: "Dominadas asistidas", sets: 4, reps: "6-8", note: "" },
-        { name: "Remo con mancuerna", sets: 3, reps: "10", note: "Cada lado" },
-        { name: "Curl de bíceps", sets: 3, reps: "12", note: "" },
+        { name: "Remo con mancuerna", sets: 3, reps: "10", weight: 14, note: "Cada lado" },
+        { name: "Curl de bíceps con mancuernas", sets: 3, reps: "12", weight: 8, note: "" },
       ],
     },
   ];

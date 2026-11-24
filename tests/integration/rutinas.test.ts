@@ -97,6 +97,43 @@ describe("crear y editar rutinas", () => {
     await q(ids.ptA, "select set_routine_active($1, true)", [id2]);
   });
 
+  it("guarda el peso de cada ejercicio, acepta vacío y lo conserva al copiar", async () => {
+    const d = JSON.stringify([
+      {
+        title: "Peso",
+        exercises: [
+          { name: "Hip thrust", sets: 4, reps: "8", weight: 62.5, note: "" },
+          { name: "Plancha", sets: 3, reps: "40 s", weight: null, note: "" },
+          { name: "Remo con barra", sets: 3, reps: "10", weight: "", note: "" },
+          { name: "Peso muerto", sets: 3, reps: "5", weight: "100", note: "" },
+        ],
+      },
+    ]);
+    // Alumnos propios de esta prueba, para no alterar lo que revisan las demás.
+    await addStudent(ids.ptA, "rst-w1", "w1@x.cl");
+    await addStudent(ids.ptA, "rst-w2", "w2@x.cl");
+    const id = await save(ids.ptA, null, "rst-w1", "Con pesos", d);
+    const rows = async (rid: string) =>
+      (await admin.query("select name, weight_kg::float8 as w from routine_exercises where routine_id=$1 order by position", [rid])).rows;
+    expect(await rows(id)).toEqual([
+      { name: "Hip thrust", w: 62.5 },
+      { name: "Plancha", w: null },
+      { name: "Remo con barra", w: null },
+      { name: "Peso muerto", w: 100 },
+    ]);
+    const copy = (await q(ids.ptA, "select copy_routine($1,$2) as id", [id, "rst-w2"])).rows[0].id;
+    expect((await rows(copy)).map((r) => r.w)).toEqual([62.5, null, null, 100]);
+    await admin.query("delete from routines where student_id in ('rst-w1','rst-w2')");
+  });
+
+  it("rechaza pesos negativos, con letras, con tres decimales o de más de 999,99 kg", async () => {
+    const bad = async (weight: unknown) =>
+      code(save(ids.ptA, null, ids.s2, "Peso malo", JSON.stringify([{ title: "A", exercises: [{ name: "X", sets: 3, reps: "10", weight, note: "" }] }])));
+    for (const w of [-5, "-5", "abc", "62,5", 62.555, 1000, "1000"]) {
+      expect(await bad(w)).toMatch(/routine_invalid/);
+    }
+  });
+
   it("valida nombre, días, ejercicios, series y largos", async () => {
     const bad = async (d: unknown, name = "Ok") => code(save(ids.ptA, null, ids.s2, name, JSON.stringify(d)));
     const ex = { name: "X", sets: 3, reps: "10", note: "" };
