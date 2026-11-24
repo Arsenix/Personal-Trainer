@@ -46,7 +46,7 @@ SKIP_ROLE_SETUP=1
 BETTER_AUTH_SECRET=$(openssl rand -base64 32)
 APP_URL=$APP_URL
 RESEND_API_KEY=
-MAIL_FROM=PT Agenda <no-responder@sanahora.app>
+MAIL_FROM="PT Agenda <no-responder@sanahora.app>"
 ENVEOF
   echo ".env.docker creado. Guarda una copia en Bitwarden."
 fi

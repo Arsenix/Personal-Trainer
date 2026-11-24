@@ -34,8 +34,14 @@ export async function sendMail(mail: Mail): Promise<boolean> {
         text: mail.text,
       }),
     });
+    if (!res.ok) {
+      // Sin esto un fallo de Resend (dominio sin verificar, clave mala) es invisible. Nunca se escribe la clave.
+      const detail = (await res.text().catch(() => "")).slice(0, 300);
+      console.error(`[correo] Resend respondió ${res.status} al enviar a ${mail.to}: ${detail}`);
+    }
     return res.ok;
-  } catch {
+  } catch (e) {
+    console.error(`[correo] no se pudo contactar a Resend: ${e instanceof Error ? e.message : String(e)}`);
     return false;
   }
 }
