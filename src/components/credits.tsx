@@ -112,13 +112,13 @@ export function AdjustCreditsForm({ studentId, month }: { studentId: string; mon
           label="Créditos"
           state={state}
           inputMode="numeric"
-          hint="Ej.: 1 suma, -1 resta"
           required
         />
         <Field name="note" label="Motivo" state={state} maxLength={200} required />
         <SubmitButton className="btn btn-primary" pendingText="…">
           Aplicar
         </SubmitButton>
+        <p className="hint -mt-1 sm:col-span-3">Créditos: un número positivo suma (1) y uno negativo resta (-1).</p>
         <div className="sm:col-span-3 empty:hidden">
           <FormMessage state={state} />
         </div>

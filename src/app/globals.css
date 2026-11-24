@@ -143,10 +143,14 @@ h3 { font-size: 1.05rem; font-stretch: 96%; font-weight: 700; letter-spacing: 0;
 
 /* ---- Agenda semanal del PT ---- */
 .cell {
-  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
-  min-height: 3.25rem; padding: .35rem .6rem;
+  display: flex; align-items: center; justify-content: space-between; gap: .4rem;
+  min-height: 2.75rem; padding: .15rem .5rem;
   border: 1px solid var(--color-line); border-radius: 6px;
   background: var(--color-paper); font-size: .85rem;
+}
+/* En escritorio todas las celdas miden lo mismo, para que las filas de los días queden alineadas. */
+@media (min-width: 768px) {
+  .cell { height: 2.25rem; min-height: 0; font-size: .8rem; }
 }
 .cell-booked { background: var(--color-volt); border-color: var(--color-volt-deep); }
 .cell-blocked {
