@@ -19,9 +19,9 @@ test("el PT parte con un horario de lunes a viernes de 06:00 a 22:00", async ({ 
   pt = await newPage(browser);
   await registerPt(pt.page, "Valentina Mora", ptEmail);
 
-  await pt.page.goto(`/pt/agenda?semana=${nextMonday}`);
+  await pt.page.goto(`/pt/agenda?dia=${nextMonday}`);
   await expect(pt.page.getByRole("heading", { level: 1, name: "Agenda" })).toBeVisible();
-  await expect(pt.page.getByText("0 clases reservadas, 80 horarios libres.")).toBeVisible();
+  await expect(pt.page.getByText("0 clases reservadas, 16 horarios libres.")).toBeVisible();
 
   await pt.page.goto("/pt/disponibilidad");
   await expect(pt.page.getByRole("heading", { name: "Bloque 1" })).toBeVisible();
@@ -70,8 +70,8 @@ test("otro alumno ya no ve ese horario como libre y el PT ve quién lo tomó", a
   await expect(s2.getByRole("button", { name: /Elegir miércoles .*, 11:00/ })).toHaveCount(1);
   await expect(s2.getByText("Tu clase")).toHaveCount(0);
 
-  await pt.page.goto(`/pt/agenda?semana=${nextMonday}`);
-  await expect(pt.page.getByText("1 clase reservada, 79 horarios libres.")).toBeVisible();
+  await pt.page.goto(`/pt/agenda?dia=${wednesday}`);
+  await expect(pt.page.getByText("1 clase reservada, 15 horarios libres.")).toBeVisible();
   await expect(pt.page.getByText("Matías Fuentes").first()).toBeVisible();
 });
 
@@ -95,11 +95,11 @@ test("el PT cancela una clase con motivo y el alumno lo ve", async () => {
   await expect(s.getByText("Clase reservada.")).toBeVisible();
 
   const p = pt.page;
-  await p.goto(`/pt/agenda?semana=${nextMonday}`);
+  await p.goto(`/pt/agenda?dia=${tuesday}`);
   await p.locator("summary", { hasText: "Cancelar" }).first().click();
   await p.getByLabel("Motivo (opcional)").fill("Me enfermé");
   await p.getByRole("button", { name: "Confirmar cancelación" }).click();
-  await expect(p.getByText("0 clases reservadas, 80 horarios libres.")).toBeVisible();
+  await expect(p.getByText("0 clases reservadas, 16 horarios libres.")).toBeVisible();
 
   await s.goto("/alumno");
   await expect(s.getByText("Cancelada por tu PT")).toBeVisible();
@@ -176,10 +176,11 @@ test("el PT arma su horario por bloques (varios días a la vez y pausa de almuer
 
 test("el PT bloquea una hora libre desde la agenda y queda en la actividad", async () => {
   const p = pt.page;
-  await p.goto(`/pt/agenda?semana=${nextMonday}`);
-  await p.getByRole("button", { name: `Bloquear 15:00 del ${addDays(nextMonday, 4)}` }).click();
+  const friday = addDays(nextMonday, 4);
+  await p.goto(`/pt/agenda?dia=${friday}`);
+  await p.getByRole("button", { name: `Bloquear 15:00 del ${friday}` }).click();
   await expect(p.getByText("Bloqueado").first()).toBeVisible();
-  await expect(p.getByText("0 clases reservadas, 79 horarios libres.")).toBeVisible();
+  await expect(p.getByText("0 clases reservadas, 15 horarios libres.")).toBeVisible();
 
   await p.goto("/pt/actividad");
   await expect(p.getByText("reservó una clase").first()).toBeVisible();

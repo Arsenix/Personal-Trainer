@@ -148,7 +148,7 @@ test("al cancelar con más de 24 horas el crédito vuelve y se puede usar en otr
 
 test("si cancela el PT el crédito vuelve, y el PT puede ajustar créditos con un motivo", async () => {
   const p = pt.page;
-  await p.goto(`/pt/agenda?semana=${nextMonday}`);
+  await p.goto(`/pt/agenda?dia=${wednesday}`);
   await p.locator("summary", { hasText: "Cancelar" }).first().click();
   await p.getByRole("button", { name: "Confirmar cancelación" }).click();
   await expect(p.getByText("3 clases reservadas")).toBeVisible();

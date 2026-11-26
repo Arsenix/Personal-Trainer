@@ -3,187 +3,219 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { BlockSlotButton, PtCancelForm } from "@/components/agenda";
 import { listSlots, type SlotRow } from "@/lib/queries";
 import { requirePt } from "@/lib/session";
-import { WEEKDAYS } from "@/lib/schedule";
-import { addDays, dayShort, hourLabel, isDateString, todayLocal, weekFromParam, weekRangeLabel } from "@/lib/dates";
+import {
+  dayLong,
+  hourLabel,
+  isDateString,
+  isMonthString,
+  monthLabel,
+  monthStartOf,
+  monthWeeks,
+  nextMonthOf,
+  prevMonthOf,
+  todayLocal,
+} from "@/lib/dates";
 
 export const metadata = { title: "Agenda" };
 
-const COLS: Record<number, string> = { 5: "md:grid-cols-5", 6: "md:grid-cols-6", 7: "md:grid-cols-7" };
+const HEADS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
-export default async function AgendaPage({ searchParams }: { searchParams: Promise<{ semana?: string; dia?: string }> }) {
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+export default async function AgendaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ dia?: string; mes?: string; semana?: string }>;
+}) {
   const user = await requirePt();
-  const { semana, dia } = await searchParams;
-  const monday = weekFromParam(semana);
-  const week = [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(monday, i));
+  const { dia, mes, semana } = await searchParams;
   const today = todayLocal();
-  const thisMonday = weekFromParam(undefined);
 
-  const rows = await listSlots(user.id, week[0], week[6]);
-  const byDay = new Map<string, Map<number, SlotRow>>();
-  for (const r of rows) {
-    if (!byDay.has(r.date)) byDay.set(r.date, new Map());
-    byDay.get(r.date)!.set(r.hour, r);
-  }
-  // Lunes a viernes siempre; sábado y domingo solo si el PT atiende esos días.
-  const days = week.filter((d, i) => i < 5 || byDay.has(d));
-  const hours = [...new Set(rows.map((r) => r.hour))].sort((a, b) => a - b);
-  const booked = rows.filter((r) => r.state === "booked").length;
-  const free = rows.filter((r) => r.state === "free").length;
-  // En el celular se ve un día a la vez: el pedido, si no hoy, si no el primero de la semana.
-  const selected = isDateString(dia) && days.includes(dia) ? dia : days.includes(today) ? today : days[0];
-  const bookedOn = (d: string) => [...(byDay.get(d)?.values() ?? [])].filter((s) => s.state === "booked").length;
+  // El mes sale de ?mes=, o del día pedido, o de hoy. (?semana= se mantiene por los enlaces antiguos.)
+  const asked = isDateString(dia) ? dia : isDateString(semana) ? semana : null;
+  const month = isMonthString(mes) ? mes : monthStartOf(asked ?? today);
+  const weeks = monthWeeks(month);
+  const rows = await listSlots(user.id, weeks[0][0], weeks[weeks.length - 1][6]);
+
+  const byDay = new Map<string, SlotRow[]>();
+  for (const r of rows) byDay.set(r.date, [...(byDay.get(r.date) ?? []), r]);
+  const inMonth = (d: string) => d.slice(0, 7) === month.slice(0, 7);
+  const hasSlots = (d: string) => (byDay.get(d)?.length ?? 0) > 0;
+
+  // Día elegido: el pedido; si no, hoy (si está en este mes); si no, el primero del mes con horarios.
+  const firstWithSlots = weeks.flat().find((d) => inMonth(d) && hasSlots(d));
+  const selected =
+    asked && inMonth(asked) ? asked : inMonth(today) ? today : (firstWithSlots ?? month);
+
+  const daySlots = (byDay.get(selected) ?? []).sort((a, b) => a.hour - b.hour);
+  const isPastDay = selected < today;
+  // De los días pasados solo importa lo que ocurrió: las horas vacías no aportan nada.
+  const visible = daySlots.filter((s) => s.state !== "past" && !(isPastDay && s.state !== "booked"));
+  const booked = daySlots.filter((s) => s.state === "booked").length;
+  const free = daySlots.filter((s) => s.state === "free").length;
+  const href = (d: string) => `/pt/agenda?mes=${month}&dia=${d}`;
+  const monthHref = (m: string) => `/pt/agenda?mes=${m}`;
+  const thisMonth = monthStartOf(today);
 
   return (
     <div className="grid gap-5">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1>Agenda</h1>
-          <p className="mt-2 text-muted">
-            Semana del {weekRangeLabel(monday)}.{" "}
-            {rows.length > 0 && (
-              <>
-                {booked} {booked === 1 ? "clase reservada" : "clases reservadas"}, {free}{" "}
-                {free === 1 ? "horario libre" : "horarios libres"}.
-              </>
-            )}
-          </p>
-        </div>
-        <nav aria-label="Cambiar de semana" className="flex items-center gap-2">
-          <Link href={`/pt/agenda?semana=${addDays(monday, -7)}`} className="btn btn-quiet btn-sm" aria-label="Semana anterior">
-            <ChevronLeft size={16} aria-hidden />
-          </Link>
-          <Link
-            href="/pt/agenda"
-            className="btn btn-quiet btn-sm"
-            aria-current={monday === thisMonday ? "page" : undefined}
-          >
-            Esta semana
-          </Link>
-          <Link href={`/pt/agenda?semana=${addDays(monday, 7)}`} className="btn btn-quiet btn-sm" aria-label="Semana siguiente">
-            <ChevronRight size={16} aria-hidden />
-          </Link>
-        </nav>
+      <header>
+        <h1>Agenda</h1>
+        <p className="mt-2 text-muted">Elige un día para ver sus horas y las clases reservadas.</p>
       </header>
 
-      {hours.length === 0 ? (
-        <section className="panel panel-pad">
-          <h2>No hay horarios publicados esta semana</h2>
-          <p className="mt-2 max-w-md text-muted">
-            Define en qué días y horas atiendes y tus alumnos podrán reservar.
-          </p>
-          <p className="mt-4">
-            <Link href="/pt/disponibilidad" className="btn btn-primary">
-              Configurar disponibilidad
+      <div className="grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start">
+        <section aria-label="Calendario" className="panel grid gap-3 p-3 sm:p-4 lg:sticky lg:top-4">
+          <div className="flex items-center justify-between gap-2">
+            <Link href={monthHref(prevMonthOf(month))} className="btn btn-quiet btn-sm" aria-label="Mes anterior">
+              <ChevronLeft size={16} aria-hidden />
             </Link>
-          </p>
-        </section>
-      ) : (
-        <>
-          {/* Celular: elegir el día arriba y ver solo ese. En escritorio se ven todos a la vez. */}
-          <nav
-            aria-label="Elegir día"
-            className="grid gap-1 md:hidden"
-            style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}
-          >
-            {days.map((d) => {
-              const n = bookedOn(d);
-              const on = d === selected;
-              return (
-                <Link
-                  key={d}
-                  href={`/pt/agenda?semana=${monday}&dia=${d}`}
-                  replace
-                  scroll={false}
-                  aria-current={on ? "page" : undefined}
-                  aria-label={`${dayShort(d)}: ${n === 0 ? "sin clases" : n === 1 ? "1 clase" : `${n} clases`}`}
-                  className={`flex min-h-14 flex-col items-center justify-center rounded-[var(--radius-field)] border text-center ${
-                    on ? "border-ink bg-ink text-paper" : d === today ? "border-ink bg-paper" : "border-line bg-paper"
-                  }`}
-                >
-                  <span className="text-[11px] leading-none">{WEEKDAYS[week.indexOf(d)].short}</span>
-                  <span className="mt-1 text-base font-semibold leading-none tabular-nums">{Number(d.slice(8))}</span>
-                  <span
-                    aria-hidden
-                    className={`mt-1 h-1.5 w-1.5 rounded-full ${n > 0 ? (on ? "bg-volt" : "bg-volt-deep") : "bg-transparent"}`}
-                  />
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className={`grid gap-3 md:gap-2 ${COLS[days.length] ?? "md:grid-cols-5"}`}>
-            {days.map((date) => {
-              const slots = byDay.get(date) ?? new Map<number, SlotRow>();
-              return (
-                <section
-                  key={date}
-                  aria-labelledby={`d-${date}`}
-                  className={`min-w-0 ${date === selected ? "" : "max-md:hidden"}`}
-                >
-                  <h2
-                    id={`d-${date}`}
-                    className={`mb-1.5 flex h-9 items-center gap-2 border-b-2 text-base ${
-                      date === today ? "border-ink" : "border-line"
-                    }`}
-                  >
-                    <span className="first-cap">{dayShort(date)}</span>
-                    {date === today && <span className="tag tag-volt normal-case !py-0 !text-[11px]">Hoy</span>}
-                  </h2>
-                  {slots.size === 0 && <p className="text-sm text-muted md:hidden">No atiendes este día.</p>}
-                  <ul className="grid grid-cols-1 gap-1">
-                    {hours.map((h) => {
-                      const s = slots.get(h);
-                      if (!s) return <li key={h} aria-hidden className="cell cell-empty max-md:!hidden" />;
-                      if (s.state === "booked") {
-                        const label = s.locationName ? `${s.studentName} · ${s.locationName}` : (s.studentName ?? "");
-                        return (
-                          <li
-                            key={h}
-                            title={label}
-                            className={`cell cell-booked relative ${s.start < new Date() ? "opacity-70" : ""}`}
-                          >
-                            <div className="min-w-0">
-                              <p className="truncate">
-                                <span className="text-xs tabular-nums">{hourLabel(h)}</span>{" "}
-                                <span className="font-semibold">{s.studentName}</span>
-                              </p>
-                              {s.locationName && <p className="truncate text-xs md:hidden">{s.locationName}</p>}
-                            </div>
-                            {!s.start || s.start > new Date() ? (
-                              <PtCancelForm id={s.bookingId!} who={s.studentName ?? "este alumno"} />
-                            ) : null}
-                          </li>
-                        );
-                      }
-                      if (s.state === "blocked") {
-                        return (
-                          <li key={h} className="cell cell-blocked">
-                            <span className="tabular-nums">{hourLabel(h)}</span>
-                            <span className="text-xs">Bloqueado</span>
-                          </li>
-                        );
-                      }
-                      if (s.state === "past") {
-                        return (
-                          <li key={h} className="cell cell-past max-md:!hidden">
-                            <span className="tabular-nums text-muted">{hourLabel(h)}</span>
-                          </li>
-                        );
-                      }
-                      return (
-                        <li key={h} className="cell">
-                          <span className="font-medium tabular-nums">{hourLabel(h)}</span>
-                          <BlockSlotButton date={date} hour={h} />
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </section>
-              );
-            })}
+            <h2 className="first-cap text-lg" aria-live="polite">
+              {monthLabel(month)}
+            </h2>
+            <Link href={monthHref(nextMonthOf(month))} className="btn btn-quiet btn-sm" aria-label="Mes siguiente">
+              <ChevronRight size={16} aria-hidden />
+            </Link>
           </div>
-        </>
-      )}
+
+          <div role="grid" aria-label={`Días de ${monthLabel(month)}`} className="grid gap-1">
+            <div role="row" className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-muted">
+              {HEADS.map((h) => (
+                <span key={h} role="columnheader" className="py-1">
+                  {h}
+                </span>
+              ))}
+            </div>
+            {weeks.map((week) => (
+              <div key={week[0]} role="row" className="grid grid-cols-7 gap-1">
+                {week.map((d) => {
+                  if (!inMonth(d)) return <span key={d} role="gridcell" aria-hidden className="min-h-12" />;
+                  const slots = byDay.get(d) ?? [];
+                  const nBooked = slots.filter((s) => s.state === "booked").length;
+                  const nFree = slots.filter((s) => s.state === "free").length;
+                  const on = d === selected;
+                  const label = `${dayLong(d)}: ${nBooked === 0 ? "sin clases" : plural(nBooked, "clase", "clases")}${nFree > 0 ? `, ${plural(nFree, "horario libre", "horarios libres")}` : ""}`;
+                  const base =
+                    "flex min-h-12 flex-col items-center justify-center rounded-[var(--radius-field)] border text-sm";
+                  return (
+                    <span key={d} role="gridcell" className="contents">
+                      {slots.length === 0 ? (
+                        <span className={`${base} border-transparent text-[#9aa19a]`}>
+                          <span className="tabular-nums leading-none">{Number(d.slice(8))}</span>
+                        </span>
+                      ) : (
+                        <Link
+                          href={href(d)}
+                          replace
+                          scroll={false}
+                          aria-current={on ? "date" : undefined}
+                          aria-label={label}
+                          className={`${base} ${
+                            on
+                              ? "border-ink bg-ink text-paper"
+                              : d === today
+                                ? "border-ink bg-paper font-bold"
+                                : "border-line bg-paper hover:border-ink"
+                          } ${d < today && !on ? "opacity-60" : ""}`}
+                        >
+                          <span className="tabular-nums leading-none">{Number(d.slice(8))}</span>
+                          <span
+                            aria-hidden
+                            className={`mt-1 flex items-center gap-1 text-[11px] leading-none tabular-nums ${on ? "text-volt" : "text-muted"}`}
+                          >
+                            <span
+                              className={`inline-block size-1.5 rounded-full ${nBooked > 0 ? "bg-volt-deep" : "bg-transparent"}`}
+                            />
+                            {nBooked > 0 ? nBooked : ""}
+                          </span>
+                        </Link>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between gap-2 text-xs text-muted">
+            <span className="flex items-center gap-1">
+              <span className="inline-block size-1.5 rounded-full bg-volt-deep" /> N.º de clases reservadas
+            </span>
+            {month !== thisMonth && (
+              <Link href={href(today)} className="font-semibold text-ink underline underline-offset-4">
+                Ir a hoy
+              </Link>
+            )}
+          </div>
+        </section>
+
+        <section aria-labelledby="dia-elegido" className="grid gap-3">
+          <div>
+            <h2 id="dia-elegido" className="text-xl first-cap">
+              {dayLong(selected)}
+              {selected === today && <span className="tag tag-volt ml-2 align-middle normal-case">Hoy</span>}
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              {daySlots.length === 0
+                ? "No atiendes este día."
+                : isPastDay
+                  ? plural(booked, "clase reservada", "clases reservadas") + "."
+                  : `${plural(booked, "clase reservada", "clases reservadas")}, ${plural(free, "horario libre", "horarios libres")}.`}
+            </p>
+          </div>
+
+          {daySlots.length === 0 && (
+            <p className="panel panel-pad text-muted">
+              Para cambiar los días y horas en que atiendes, ve a{" "}
+              <Link href="/pt/disponibilidad" className="font-semibold text-ink underline underline-offset-4">
+                Disponibilidad
+              </Link>
+              .
+            </p>
+          )}
+          {daySlots.length > 0 && visible.length === 0 && (
+            <p className="panel panel-pad text-muted">
+              {isPastDay ? "No hubo clases este día." : "Ya pasaron todos los horarios de hoy."}
+            </p>
+          )}
+
+          <ul className="grid grid-cols-1 gap-1.5">
+            {visible.map((s) => {
+              if (s.state === "booked") {
+                return (
+                  <li key={s.hour} className={`cell cell-booked relative !min-h-14 md:!h-auto ${s.start < new Date() ? "opacity-70" : ""}`}>
+                    <div className="min-w-0">
+                      <p className="truncate">
+                        <span className="tabular-nums">{hourLabel(s.hour)}</span>{" "}
+                        <span className="font-semibold">{s.studentName}</span>
+                      </p>
+                      {s.locationName && <p className="truncate text-xs">{s.locationName}</p>}
+                    </div>
+                    {s.start > new Date() ? <PtCancelForm id={s.bookingId!} who={s.studentName ?? "este alumno"} /> : null}
+                  </li>
+                );
+              }
+              if (s.state === "blocked") {
+                return (
+                  <li key={s.hour} className="cell cell-blocked !min-h-12 md:!h-auto">
+                    <span className="tabular-nums">{hourLabel(s.hour)}</span>
+                    <span className="text-xs">Bloqueado</span>
+                  </li>
+                );
+              }
+              return (
+                <li key={s.hour} className="cell !min-h-12 md:!h-auto">
+                  <span className="flex items-baseline gap-3">
+                    <span className="font-medium tabular-nums">{hourLabel(s.hour)}</span>
+                    <span className="text-xs text-muted">Libre</span>
+                  </span>
+                  <BlockSlotButton date={selected} hour={s.hour} />
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      </div>
 
       <p className="text-sm text-muted">
         Para cambiar los días y horas en que atiendes, o bloquear vacaciones, ve a{" "}
