@@ -130,7 +130,7 @@ export default async function AgendaPage({ searchParams }: { searchParams: Promi
                     {date === today && <span className="tag tag-volt normal-case !py-0 !text-[11px]">Hoy</span>}
                   </h2>
                   {slots.size === 0 && <p className="text-sm text-muted md:hidden">No atiendes este día.</p>}
-                  <ul className="grid gap-1">
+                  <ul className="grid grid-cols-1 gap-1">
                     {hours.map((h) => {
                       const s = slots.get(h);
                       if (!s) return <li key={h} aria-hidden className="cell cell-empty max-md:!hidden" />;
