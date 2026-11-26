@@ -44,7 +44,7 @@ export function PtCancelForm({ id, who }: { id: string; who: string }) {
   const [state, action] = useActionState(cancelBookingAsPt, initialState);
   return (
     <details className="group relative shrink-0">
-      <summary className="btn btn-quiet btn-sm !min-h-9 cursor-pointer list-none !px-3 text-sm marker:content-none">
+      <summary className="btn btn-quiet btn-sm !min-h-9 cursor-pointer list-none !bg-paper !px-3 text-sm marker:content-none">
         <X size={14} strokeWidth={1.75} aria-hidden />
         Cancelar
       </summary>

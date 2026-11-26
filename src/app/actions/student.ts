@@ -6,7 +6,7 @@ import { requireStudent } from "@/lib/session";
 import { notifyBooking } from "@/lib/agenda-mail";
 import { notifyProofUploaded } from "@/lib/credit-mail";
 import { str, type ActionState } from "@/lib/action-state";
-import { currentMonth, nextMonthOf } from "@/lib/dates";
+import { currentMonth, nextMonthOf, todayLocal } from "@/lib/dates";
 import { MAX_PROOF_BYTES, safeFileName, sniffProof } from "@/lib/files";
 
 function refresh() {
@@ -110,4 +110,34 @@ export async function uploadProof(_prev: ActionState, fd: FormData): Promise<Act
   revalidatePath("/alumno", "layout");
   revalidatePath("/pt", "layout");
   return { ok: true, message: "Comprobante enviado. Tu PT lo revisará y activará el mes." };
+}
+
+export async function saveWorkout(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requireStudent();
+  const day = str(fd, "day");
+  if (!/^[0-9a-f-]{36}$/.test(day)) return { error: "Día no válido." };
+  let data: unknown;
+  try {
+    data = JSON.parse(str(fd, "data"));
+  } catch {
+    return { error: "No pudimos leer lo que anotaste. Recarga la página e intenta de nuevo." };
+  }
+  try {
+    await withUser(user.id, (c) =>
+      c.query("select save_workout($1, $2::date, $3::jsonb)", [day, todayLocal(), JSON.stringify(data)]),
+    );
+  } catch (e) {
+    switch (dbCode(e)) {
+      case "routine_not_found":
+        return { error: "Tu PT cambió la rutina. Recarga la página para ver la nueva." };
+      case "workout_invalid":
+        return { error: "Revisa los números: repeticiones enteras y peso con hasta dos decimales." };
+      default:
+        console.error("saveWorkout", e);
+        return { error: "No pudimos guardar. Intenta de nuevo." };
+    }
+  }
+  revalidatePath("/alumno/rutina");
+  revalidatePath("/pt/alumnos", "layout");
+  return { ok: true, message: "Entrenamiento guardado." };
 }

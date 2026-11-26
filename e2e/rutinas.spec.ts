@@ -8,6 +8,7 @@ let pt: Awaited<ReturnType<typeof newPage>>;
 let s1: Awaited<ReturnType<typeof newPage>>;
 let s2: Awaited<ReturnType<typeof newPage>>;
 let editUrl = "";
+let progressUrl = "";
 
 test("sin rutina, el alumno lo ve y el PT tiene a quién crearle una", async ({ browser }) => {
   pt = await newPage(browser);
@@ -78,16 +79,58 @@ test("el alumno ve su rutina completa y en orden", async () => {
   await expect(s.getByRole("heading", { level: 1, name: "Base de fuerza" })).toBeVisible();
   await expect(s.getByText("Calienta 10 minutos.")).toBeVisible();
   await expect(s.getByRole("heading", { name: "Piernas" })).toBeVisible();
-  await expect(s.getByText("Sentadilla")).toBeVisible();
-  await expect(s.getByText("Pausa arriba")).toBeVisible();
-  await expect(s.getByRole("listitem").filter({ hasText: "Sentadilla" })).toContainText("4 × 8-10 · 60 kg");
-  await expect(s.getByRole("listitem").filter({ hasText: "Hip thrust" })).toContainText("62,5 kg");
-  // Sin peso cargado no se muestra nada (peso corporal).
-  await expect(s.getByRole("listitem").filter({ hasText: "Press banca" })).not.toContainText("kg");
   await expect(s.getByRole("heading", { name: "Empuje" })).toBeVisible();
+  await expect(s.getByText("Pausa arriba")).toBeVisible();
+  await expect(s.getByRole("group", { name: "Sentadilla" })).toContainText("Indicado: 4 × 8-10 · 60 kg");
+  await expect(s.getByRole("group", { name: "Hip thrust" })).toContainText("62,5 kg");
+  // Cada serie viene rellenada con lo indicado y sin marcar.
+  await expect(s.getByLabel("Sentadilla, serie 1: repeticiones", { exact: true })).toHaveValue("8");
+  await expect(s.getByLabel("Sentadilla, serie 1: peso en kilos", { exact: true })).toHaveValue("60");
+  await expect(s.getByLabel("Sentadilla, serie 4: repeticiones", { exact: true })).toBeVisible();
+  await expect(s.getByLabel("Sentadilla, serie 5: repeticiones", { exact: true })).toHaveCount(0);
+  // El segundo día arranca cerrado; sin peso cargado no se muestra nada (peso corporal).
+  await s.getByRole("heading", { name: "Empuje" }).click();
+  await expect(s.getByRole("group", { name: "Press banca" })).toContainText("Indicado: 3 × 10");
+  await expect(s.getByRole("group", { name: "Press banca" })).not.toContainText("Indicado: 3 × 10 ·");
+  await expect(s.getByLabel("Press banca, serie 1: peso en kilos", { exact: true })).toHaveValue("");
   // El otro alumno no ve nada de esto.
   await s2.page.goto("/alumno/rutina");
   await expect(s2.page.getByText("Tu PT todavía no te asignó una rutina.")).toBeVisible();
+});
+
+test("el alumno anota sus series, lo puede corregir, y el PT ve el progreso", async () => {
+  const s = s1.page;
+  await s.goto("/alumno/rutina");
+  await s.getByLabel("Sentadilla, serie 1: peso en kilos", { exact: true }).fill("65");
+  await s.getByLabel("Sentadilla, serie 1: repeticiones", { exact: true }).fill("9");
+  await s.getByRole("button", { name: "Sentadilla, serie 1 hecha" }).click();
+  await s.getByRole("button", { name: "Más: Sentadilla, serie 2: peso en kilos" }).click();
+  await expect(s.getByLabel("Sentadilla, serie 2: peso en kilos", { exact: true })).toHaveValue("62,5");
+  await s.getByRole("button", { name: "Sentadilla, serie 2 hecha" }).click();
+  await s.getByRole("group", { name: "Sentadilla" }).getByLabel("Nota (opcional)").fill("Costó la última");
+  await s.getByRole("button", { name: "Guardar entrenamiento" }).first().click();
+  await expect(s.getByText("Entrenamiento guardado.")).toBeVisible();
+
+  // Al volver, lo anotado sigue ahí y el día queda marcado.
+  await s.goto("/alumno/rutina");
+  await expect(s.getByText("Registrado hoy")).toBeVisible();
+  await expect(s.getByLabel("Sentadilla, serie 1: peso en kilos", { exact: true })).toHaveValue("65");
+  await expect(s.getByRole("button", { name: "Sentadilla, serie 1 hecha" })).toHaveAttribute("aria-pressed", "true");
+  await expect(s.getByRole("button", { name: "Sentadilla, serie 3 hecha" })).toHaveAttribute("aria-pressed", "false");
+
+  // El PT lo ve en el progreso del alumno.
+  const p = pt.page;
+  await p.goto("/pt/alumnos");
+  await p.getByRole("listitem").filter({ hasText: "Tomás Vera" }).getByRole("link", { name: "Ver entrenamientos" }).click();
+  await expect(p.getByRole("heading", { level: 1, name: "Progreso de Tomás Vera" })).toBeVisible();
+  progressUrl = p.url();
+  await expect(p.getByText("1 entrenamiento registrado.")).toBeVisible();
+  await expect(p.getByText("65 kg × 9 · 62,5 kg × 8")).toBeVisible();
+  await expect(p.getByText("“Costó la última”")).toBeVisible();
+
+  // El otro alumno no tiene nada registrado.
+  await s2.page.goto("/alumno/rutina");
+  await expect(s2.page.getByText("Registrado hoy")).toHaveCount(0);
 });
 
 test("el PT edita la rutina y el alumno ve el cambio", async () => {
@@ -100,7 +143,7 @@ test("el PT edita la rutina y el alumno ve el cambio", async () => {
   await expect(p.getByText("Tomás Vera · 1 día, 2 ejercicios")).toBeVisible();
 
   await s1.page.goto("/alumno/rutina");
-  await expect(s1.page.getByRole("listitem").filter({ hasText: "Sentadilla" })).toContainText("4 × 6-8");
+  await expect(s1.page.getByRole("group", { name: "Sentadilla" })).toContainText("Indicado: 4 × 6-8");
   await expect(s1.page.getByRole("heading", { name: "Empuje" })).toHaveCount(0);
 });
 
@@ -131,9 +174,14 @@ test("otro PT no puede abrir ni crear rutinas de estos alumnos, y el alumno no e
   await registerPt(other.page, "Otra Entrenadora", `otra.${run}@prueba.cl`);
   const res = await other.page.goto(editUrl);
   expect(res?.status()).toBe(404);
+  // Tampoco puede ver los entrenamientos de un alumno que no es suyo.
+  const prog = await other.page.goto(progressUrl);
+  expect(prog?.status()).toBe(404);
   await other.ctx.close();
 
   await s1.page.goto(editUrl);
+  await expect(s1.page).toHaveURL(/\/alumno$/);
+  await s1.page.goto(progressUrl);
   await expect(s1.page).toHaveURL(/\/alumno$/);
   await Promise.all([pt.ctx.close(), s1.ctx.close(), s2.ctx.close()]);
 });

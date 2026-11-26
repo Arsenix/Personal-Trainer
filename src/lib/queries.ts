@@ -521,3 +521,84 @@ export async function getStudentContact(userId: string, studentId: string): Prom
     return rows[0] ?? null;
   });
 }
+
+// ---------------------------------------------------------------------------
+// Registro de entrenamientos
+// ---------------------------------------------------------------------------
+export type LoggedSet = { reps: number | null; weight: number | null; done: boolean };
+export type LoggedExercise = {
+  position: number;
+  name: string;
+  plannedSets: number;
+  plannedReps: string;
+  plannedWeight: number | null;
+  note: string;
+  sets: LoggedSet[];
+};
+export type WorkoutSession = {
+  id: string;
+  date: string;
+  dayTitle: string;
+  exercises: LoggedExercise[];
+};
+
+async function loadWorkouts(c: import("pg").PoolClient, where: string, params: unknown[], limit: number): Promise<WorkoutSession[]> {
+  const { rows } = await c.query(
+    `select s.id, s.performed_on::text as date, s.day_title as "dayTitle",
+            coalesce((
+              select jsonb_agg(jsonb_build_object(
+                       'position', e.position, 'name', e.name, 'plannedSets', e.planned_sets,
+                       'plannedReps', e.planned_reps, 'plannedWeight', e.planned_weight_kg::float8,
+                       'note', coalesce(e.note, ''),
+                       'sets', coalesce((select jsonb_agg(jsonb_build_object('reps', st.reps, 'weight', st.weight_kg::float8, 'done', st.done)
+                                                          order by st.set_number)
+                                           from workout_sets st where st.exercise_id = e.id), '[]'::jsonb)
+                     ) order by e.position)
+                from workout_exercises e where e.session_id = s.id), '[]'::jsonb) as exercises
+       from workout_sessions s
+      where ${where}
+      order by s.performed_on desc, s.updated_at desc
+      limit ${limit}`,
+    params,
+  );
+  return rows;
+}
+
+/** Lo que el alumno ya registró hoy (para reabrirlo y corregirlo). */
+export async function getTodaysWorkouts(studentId: string, today: string): Promise<WorkoutSession[]> {
+  return withUser(studentId, (c) => loadWorkouts(c, "s.student_id = $1 and s.performed_on = $2", [studentId, today], 10));
+}
+
+export type LastTime = { date: string; sets: { reps: number | null; weight: number | null }[] };
+
+/** La última vez (antes de hoy) que el alumno hizo cada ejercicio, con sus series hechas. Clave: nombre en minúsculas. */
+export async function getLastTimes(studentId: string, today: string): Promise<Record<string, LastTime>> {
+  return withUser(studentId, async (c) => {
+    const { rows } = await c.query(
+      `select distinct on (lower(e.name)) lower(e.name) as key, s.performed_on::text as date,
+              (select jsonb_agg(jsonb_build_object('reps', st.reps, 'weight', st.weight_kg::float8) order by st.set_number)
+                 from workout_sets st where st.exercise_id = e.id and st.done) as sets
+         from workout_exercises e join workout_sessions s on s.id = e.session_id
+        where s.student_id = $1 and s.performed_on < $2
+          and exists (select 1 from workout_sets st where st.exercise_id = e.id and st.done)
+        order by lower(e.name), s.performed_on desc`,
+      [studentId, today],
+    );
+    return Object.fromEntries(rows.map((r) => [r.key as string, { date: r.date as string, sets: r.sets }]));
+  });
+}
+
+/** Historial de entrenamientos de un alumno, para su PT. */
+export async function listWorkoutsForPt(ptId: string, studentId: string, limit = 40): Promise<WorkoutSession[]> {
+  return withUser(ptId, (c) => loadWorkouts(c, "s.student_id = $1 and s.pt_id = $2", [studentId, ptId], limit));
+}
+
+export async function getStudentName(ptId: string, studentId: string): Promise<string | null> {
+  return withUser(ptId, async (c) => {
+    const { rows } = await c.query(
+      `select u.name from students s join "user" u on u.id = s.user_id where s.user_id = $1 and s.pt_id = $2`,
+      [studentId, ptId],
+    );
+    return rows[0]?.name ?? null;
+  });
+}

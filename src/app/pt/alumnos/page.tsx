@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { InviteForm, InvitationActions, StudentLocationForm } from "@/components/forms";
 import { StudentMonths } from "@/components/student-months";
 import {
@@ -100,6 +101,11 @@ export default async function AlumnosPage() {
                       "Sin teléfono"
                     )}
                     {" · "}desde {formatDate(s.joinedAt)}
+                  </p>
+                  <p className="mt-1 text-sm">
+                    <Link href={`/pt/progreso/${s.userId}`} className="font-semibold underline underline-offset-4">
+                      Ver entrenamientos
+                    </Link>
                   </p>
                 </div>
                 <StudentLocationForm studentId={s.userId} current={s.locationId} locations={active} />
